@@ -6,7 +6,7 @@
 | 항목 | 값 |
 |---|---|
 | 서버 | iwinv `stock-alert` (KR1-Lite, vgna_1_n, Ubuntu 24.04) |
-| 공인 IP | 새 서버의 IP (아래에서 `새서버IP` 라고 적은 곳) |
+| 공인 IP | `49.247.139.240` |
 | 주소 | `alert.broadstore.co.kr` |
 
 > ⚠️ 인트라넷 서버(`49.247.133.38`)가 아니라 **새로 만든 서버**에서 하는 작업입니다.
@@ -24,7 +24,7 @@
 
    | 타입 | 호스트 | 값/위치 | TTL |
    |---|---|---|---|
-   | A | `alert` | `새서버IP` | 600 |
+   | A | `alert` | `49.247.139.240` | 600 |
 
 > ⚠️ 이미 있는 다른 레코드(`@`, `www`, `intranet` 등)는 **절대 고치거나 지우지 마세요.**
 
@@ -33,7 +33,7 @@
 ## 2. 서버 접속 (내 PC 의 PowerShell)
 
 ```powershell
-ssh root@새서버IP
+ssh root@49.247.139.240
 ```
 
 - `Are you sure you want to continue connecting (yes/no)?` → `yes`
@@ -80,7 +80,7 @@ git clone -b claude/stage-1 -c core.sshCommand="ssh -i /root/.ssh/stock_deploy -
 ```bash
 getent hosts alert.broadstore.co.kr
 ```
-`새서버IP  alert.broadstore.co.kr` 이 나오면 준비 완료. 아무것도 안 나오면 1번이 아직 반영 전이니 조금 기다리세요.
+`49.247.139.240  alert.broadstore.co.kr` 이 나오면 준비 완료. 아무것도 안 나오면 1번이 아직 반영 전이니 조금 기다리세요.
 
 ```bash
 bash /opt/stock-alert/app/deploy/setup.sh alert.broadstore.co.kr
