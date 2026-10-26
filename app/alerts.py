@@ -1,6 +1,21 @@
 """알림 필터: 언제 알릴지, 언제 막을지 정한다."""
 
 from . import config
+from .rules import zone_level
+
+
+def held_level(prev_level: int | None, drawdown: float) -> int | None:
+    """경계선 여유를 둔 현재 구간 (알림 판단용 기록).
+
+    더 깊어지면 바로 새 구간으로 본다. 회복할 때는 기준보다 2%p 더 올라와야 벗어난 것으로 본다.
+    예: -35% 구간에 있다가 -33.5%로 회복 → 아직 35구간 / -32.9%까지 회복 → 30구간
+    """
+    now = zone_level(drawdown)
+    if prev_level is None or (now is not None and now >= prev_level):
+        return now
+    # 딱 2%p 회복한 경우도 벗어난 것으로 보도록 아주 작은 값을 더한다
+    held = zone_level(drawdown - config.HYSTERESIS + 1e-6)
+    return None if held is None else min(prev_level, held)
 
 
 def newly_entered_zone(prev_level: int | None, new_level: int | None) -> int | None:

@@ -21,9 +21,19 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(ROOT / ".env")
 
-# 매수 검토 알림: 1년 고점 대비 -30%부터 5%p마다 끝까지
-BUY_ZONE_START = 30
-BUY_ZONE_STEP = 5
+# 1년 고점 대비 하락 알림: -5%부터 5%p마다 끝까지
+ZONE_START = 5
+ZONE_STEP = 5
+
+# 단계: (이 구간부터, 키, 이름). 깊은 것부터 적는다.
+#   매수검토 -5·-10·-15%, 매수권장 -20%부터 5%p마다 계속
+TIERS = [
+    (20, "buy", "매수권장"),
+    (5, "review", "매수검토"),
+]
+
+# 경계선 여유: 구간 기준보다 2%p 이상 회복해야 "구간을 벗어났다"고 본다
+HYSTERESIS = 2
 
 # 1년 = 최근 252 거래일
 WINDOW_DAYS = 252

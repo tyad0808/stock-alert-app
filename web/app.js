@@ -3,10 +3,12 @@
 
 const $ = (sel) => document.querySelector(sel);
 const view = $("#view");
-const state = { status: null };
+const state = { status: null, page: "home" };
 
-const TITLES = { home: "홈", watch: "관심 종목", etf: "ETF", brief: "브리핑", alerts: "알림", settings: "설정" };
+const TITLES = { home: "Top 10", etf: "ETF", brief: "브리핑", alerts: "알림", settings: "설정" };
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+const KIND_LABEL = { buy: "매수권장", review: "매수검토", data_check: "데이터 확인" };
+const BOARD_REFRESH_MS = 60 * 1000;
 
 // ---------- 공통 ----------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -17,6 +19,7 @@ function dayLabel(iso) {
   const d = new Date(iso + "T00:00:00");
   return `${d.getMonth() + 1}/${d.getDate()} (${WEEK[d.getDay()]})`;
 }
+const timeLabel = (iso) => (iso ? iso.slice(11, 16) : "");
 function store(key, value) {
   try {
     if (value === undefined) return localStorage.getItem(key);
@@ -43,38 +46,60 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
 }
 
-// ---------- 종목 행 ----------
-function stockRow(s) {
-  if (s.price === undefined) {
-    return `<a class="row" href="#/stock/${encodeURIComponent(s.symbol)}">
-      <div class="name">${esc(s.name)}<span class="sym">${esc(s.symbol)}</span></div>
-      <div><span class="tag warn">데이터 확인 필요</span></div></a>`;
-  }
-  const inZone = s.level != null;
-  const fall = Math.min(Math.abs(s.drawdown), 60);
-  const toNext = (s.next_price / s.price - 1) * 100;
-  return `<a class="row ${inZone ? "in-zone" : ""}" href="#/stock/${encodeURIComponent(s.symbol)}">
-    <div class="name">${esc(s.name)}<span class="sym">${esc(s.symbol)}</span></div>
+const tierTag = (t, big = false) => (t ? `<span class="tag ${t.key}${big ? " big" : ""}">${t.label}</span>` : "");
+
+// ---------- Top 10 시세판 ----------
+function stockCard(s) {
+  const cls = s.tier ? s.tier.key : "";
+  return `<a class="stock ${cls}" href="#/stock/${encodeURIComponent(s.symbol)}">
+    <div class="name">${esc(s.name)}<span class="sym">${esc(s.symbol)}</span>
+      ${tierTag(s.tier)}${s.new_high ? `<span class="tag newhigh">신고가</span>` : ""}
+      ${s.data_warning ? `<span class="tag warn">데이터 확인 필요</span>` : ""}</div>
     <div class="price num">${usd(s.price)}</div>
-    <div class="sub">${inZone ? `<span class="tag zone">매수 검토 -${s.level}% 구간</span>` : "1년 고점 " + usd(s.high)}
-      ${s.data_warning ? ` <span class="tag warn">데이터 확인 필요</span>` : ""}</div>
-    <div class="chg num ${updown(s.change_pct)}">${pct(s.change_pct, 2)}</div>
-    <div class="dd">
-      <span class="dd-val num">${pct(s.drawdown)}</span>
-      <span class="meter" role="img" aria-label="1년 고점 대비 ${pct(s.drawdown)}">
-        <span class="fill" style="width:${(fall / 60) * 100}%"></span>
-        <span class="mark" style="left:50%"></span>
-      </span>
-    </div>
-    <div class="next num">다음 알림 -${s.next_level}% · ${usd(s.next_price)} (지금보다 ${toNext.toFixed(1)}%)</div>
+    <div class="high num">1년 고점 <b>${usd(s.high)}</b></div>
+    <div class="chg num ${updown(s.change_pct)}">전일 ${pct(s.change_pct, 2)}</div>
+    <div class="dd"><span class="k">1년 고점 대비</span><span class="v num">${pct(s.drawdown)}</span></div>
   </a>`;
 }
 
+async function renderHome() {
+  const { stocks, updated } = await api("/board");
+  const sort = store("sort") || "drop";
+  const list = sort === "drop" ? [...stocks].sort((a, b) => a.drawdown - b.drawdown) : stocks;
+  const count = (k) => stocks.filter((s) => s.tier?.key === k).length;
+  const live = !state.status?.is_practice;
+  view.innerHTML = `
+    <div class="summary">
+      <div class="sum buy"><div class="k">매수권장 (-20% 이상)</div><div class="v num">${count("buy")}<small> 종목</small></div></div>
+      <div class="sum review"><div class="k">매수검토 (-5 ~ -15%)</div><div class="v num">${count("review")}<small> 종목</small></div></div>
+    </div>
+    <div class="board-head">
+      <span class="board-time">${live ? `<b>${timeLabel(updated)}</b> 기준 · 1분마다 자동 갱신` : "연습용 데이터"}</span>
+      <span class="sort">
+        <button class="chip ${sort === "drop" ? "on" : ""}" data-sort="drop">하락률순</button>
+        <button class="chip ${sort === "cap" ? "on" : ""}" data-sort="cap">시총순</button>
+      </span>
+    </div>
+    ${list.map(stockCard).join("")}
+    <p class="muted" style="margin:10px 4px">미국 시가총액 상위 10개 · 목록은 매월 1회 갱신합니다.</p>
+  `;
+  view.querySelectorAll("[data-sort]").forEach((b) => {
+    b.onclick = () => { store("sort", b.dataset.sort); renderHome(); };
+  });
+}
+
+// 시세판을 보고 있는 동안 1분마다 새로 받아온다
+setInterval(() => {
+  if (state.page === "home" && document.visibilityState === "visible" && !state.status?.is_practice) {
+    renderHome().catch(() => {});
+  }
+}, BOARD_REFRESH_MS);
+
+// ---------- 알림 ----------
 function alertCard(a) {
-  const isWarn = a.kind === "data_check";
-  return `<a class="alert" href="#/stock/${encodeURIComponent(a.symbol)}">
+  return `<a class="alert ${a.kind}" href="#/stock/${encodeURIComponent(a.symbol)}">
     <div class="alert-head">
-      <span class="tag ${isWarn ? "warn" : "zone"}">${isWarn ? "데이터 확인" : "매수 검토"}</span>
+      <span class="tag ${a.kind === "data_check" ? "warn" : a.kind}">${KIND_LABEL[a.kind] || ""}</span>
       <strong>${esc(a.name)}</strong><span class="muted">${esc(a.symbol)}</span>
     </div>
     <div class="alert-msg num">${esc(a.message)}</div>
@@ -94,39 +119,6 @@ function alertList(alerts) {
   return html;
 }
 
-// ---------- 화면들 ----------
-async function renderHome() {
-  const [{ stocks }, { alerts }] = await Promise.all([api("/watchlist"), api("/alerts")]);
-  const inZone = stocks.filter((s) => s.level != null);
-  view.innerHTML = `
-    <section class="card">
-      <span class="stage">2단계에서 연결</span>
-      <h2>내 보유 현황</h2>
-      <p>키움 계좌를 연결하면 총 평가금액, 수익률, 보유 종목 카드가 여기에 나옵니다.</p>
-    </section>
-    <section class="card hero">
-      <div class="label">시총 Top 10 중 매수 검토 구간 (1년 고점 대비 -30% 이상)</div>
-      <div class="big num">${inZone.length}개 <span class="muted">/ ${stocks.length}개</span></div>
-    </section>
-    ${inZone.length ? `<div class="list">${inZone.map(stockRow).join("")}</div>` : ""}
-    <div class="section-title">최근 알림 <a href="#/alerts">전체 보기</a></div>
-    ${alerts.length ? alerts.slice(0, 3).map(alertCard).join("") : `<div class="empty">아직 받은 알림이 없습니다</div>`}
-  `;
-}
-
-async function renderWatch() {
-  const { stocks } = await api("/watchlist");
-  view.innerHTML = `
-    <p class="muted" style="margin:0 4px 10px">미국 시가총액 상위 10개 · 1년 고점 대비 하락률 큰 순서</p>
-    <div class="list">${stocks.map(stockRow).join("")}</div>
-    <p class="muted" style="margin:10px 4px">막대의 세로선이 -30% 지점입니다. 감시 목록은 매월 1회 갱신합니다.</p>
-  `;
-}
-
-function renderStage(stage, title, body) {
-  view.innerHTML = `<section class="card"><span class="stage">${stage}</span><h2>${title}</h2><p>${body}</p></section>`;
-}
-
 async function renderAlerts() {
   const { alerts } = await api("/alerts");
   if (alerts.length) store("seenAlert", String(alerts[0].id));
@@ -134,24 +126,25 @@ async function renderAlerts() {
   view.innerHTML = alertList(alerts);
 }
 
+function renderStage(stage, title, body) {
+  view.innerHTML = `<section class="card"><span class="stage">${stage}</span><h2>${title}</h2><p>${body}</p></section>`;
+}
+
+// ---------- 종목 상세 ----------
 async function renderStock(symbol) {
   const d = await api("/stock/" + encodeURIComponent(symbol));
   $("#title").textContent = d.name;
-  if (d.price === undefined) {
-    view.innerHTML = `<section class="card"><span class="tag warn">데이터 확인 필요</span><p style="margin-top:8px">들어온 가격이 비정상이라 알림 판단에서 제외했습니다.</p></section>`;
-    return;
-  }
-  const inZone = d.level != null;
+  const hit = (z) => d.drawdown <= -z.level;
   view.innerHTML = `
     <section class="card detail-head">
       <div class="muted">${esc(d.symbol)} · ${dayLabel(d.date)} 장 기준</div>
-      <div class="price num">${usd(d.price)} <span class="num ${updown(d.change_pct)}" style="font-size:16px">${pct(d.change_pct, 2)}</span></div>
-      ${inZone ? `<span class="tag zone">매수 검토 -${d.level}% 구간</span>` : ""}
-      ${d.data_warning ? `<span class="tag warn">오늘 데이터 확인 필요</span>` : ""}
+      <div class="price num">${usd(d.price)} <span class="num ${updown(d.change_pct)}" style="font-size:16px">전일 ${pct(d.change_pct, 2)}</span></div>
+      ${tierTag(d.tier, true)}${d.new_high ? `<span class="tag newhigh big">신고가</span>` : ""}
+      ${d.data_warning ? `<span class="tag warn big">오늘 데이터 확인 필요</span>` : ""}
       <div class="stats">
-        <div class="stat"><div class="k">1년 고점</div><div class="v num">${usd(d.high)}</div></div>
+        <div class="stat high"><div class="k">1년 고점</div><div class="v num">${usd(d.high)}</div></div>
         <div class="stat"><div class="k">고점 대비</div><div class="v num">${pct(d.drawdown)}</div></div>
-        <div class="stat"><div class="k">다음 알림</div><div class="v num">-${d.next_level}%</div></div>
+        <div class="stat"><div class="k">현재 구간</div><div class="v num">${d.level ? "-" + d.level + "%" : "-"}</div></div>
       </div>
     </section>
     <section class="card">
@@ -159,23 +152,20 @@ async function renderStock(symbol) {
       <div class="chart-wrap" id="chart"></div>
       <div class="legend">
         <span><i style="border-color:var(--series)"></i>종가</span>
-        <span><i style="border-color:var(--text-2);border-top-style:dashed"></i>1년 고점</span>
-        <span><i style="border-color:var(--accent);border-top-style:dashed"></i>알림 구간</span>
+        <span><i style="border-color:var(--high)"></i>1년 고점</span>
+        <span><i style="border-color:var(--review);border-top-style:dashed"></i>매수검토 시작 -5%</span>
+        <span><i style="border-color:var(--buy);border-top-style:dashed"></i>매수권장 시작 -20%</span>
       </div>
     </section>
     <section class="card">
-      <h2>알림 구간 가격</h2>
-      <p class="muted" style="margin-bottom:10px">1년 고점 ${usd(d.high)} 기준</p>
+      <h2>구간별 가격</h2>
+      <p class="muted" style="margin-bottom:10px">1년 고점 ${usd(d.high)} 기준 · 이 가격 이하로 내려가면 알림</p>
       <table class="zones">
-        <thead><tr><th>구간</th><th>이 가격 이하면 알림</th></tr></thead>
-        <tbody>${d.zones.map((z) => `<tr class="${d.level != null && z.level <= d.level ? "hit" : ""}">
-          <td>-${z.level}%${d.level != null && z.level <= d.level ? " ✓" : ""}</td><td class="num">${usd(z.price)}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>구간</th><th>가격</th></tr></thead>
+        <tbody>${d.zones.map((z) => `<tr class="${hit(z) ? "hit" : ""}">
+          <td class="num">-${z.level}%${hit(z) ? " ✓" : ""}<span class="lbl">${tierTag(z.tier)}</span></td>
+          <td class="num">${usd(z.price)}</td></tr>`).join("")}</tbody>
       </table>
-    </section>
-    <section class="card">
-      <span class="stage">2단계에서 연결</span>
-      <h2>내 평단 · 3분할 계산기</h2>
-      <p>키움 계좌를 연결하면 내 평단 선과 30/30/40 분할 금액이 여기에 나옵니다.</p>
     </section>
     <div class="section-title">이 종목 알림 기록</div>
     ${alertList(d.alerts)}
@@ -183,20 +173,24 @@ async function renderStock(symbol) {
   drawChart($("#chart"), d);
 }
 
-// 1년 가격 선 하나 + 1년 고점·알림 구간 가로선. 손가락을 대면 그날 가격이 보인다.
+// 1년 가격 선 하나 + 1년 고점·단계 시작선. 손가락을 대면 그날 가격이 보인다.
 function drawChart(el, d) {
   // 화면 폭 그대로 그려야 글자가 작아지지 않는다
-  const W = Math.max(280, el.clientWidth), H = 240, L = 4, R = 96, T = 12, B = 24;
+  const W = Math.max(280, el.clientWidth), H = 240, L = 4, R = 104, T = 12, B = 24;
   const pts = d.series;
   const closes = pts.map((p) => p.close);
-  const zoneLines = d.zones.filter((z) => z.level === 30 || (d.level != null && z.level <= d.level + 5));
-  const lo = Math.min(...closes, ...zoneLines.map((z) => z.price)) * 0.97;
-  const hi = d.high * 1.03;
+  const refs = [{ cls: "high", v: d.high, label: "고점 " + usd(d.high) }];
+  for (const z of d.zones) {
+    if (z.level === 5) refs.push({ cls: "review", v: z.price, label: "-5% " + usd(z.price) });
+    if (z.level === 20) refs.push({ cls: "buy", v: z.price, label: "-20% " + usd(z.price) });
+    if (z.level > 20 && d.level != null && z.level <= d.level) refs.push({ cls: "buy", v: z.price, label: `-${z.level}% ${usd(z.price)}` });
+  }
+  const lo = Math.min(...closes, ...refs.map((r) => r.v)) * 0.97;
+  const hi = Math.max(d.high, ...closes) * 1.03;
   const x = (i) => L + (i / (pts.length - 1)) * (W - L - R);
   const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(d.name)} 1년 가격 그래프">`;
-  // 월 눈금
   let lastMonth = "";
   pts.forEach((p, i) => {
     const m = p.date.slice(0, 7);
@@ -206,9 +200,7 @@ function drawChart(el, d) {
     }
     lastMonth = m;
   });
-  // 기준선: 라벨이 겹치면 아래로 밀어낸다
-  const refs = [{ cls: "high", v: d.high, label: "고점 " + usd(d.high) },
-    ...zoneLines.map((z) => ({ cls: "zone", v: z.price, label: `-${z.level}% ${usd(z.price)}` }))];
+  // 기준선 라벨이 겹치면 아래로 밀어낸다
   let lastY = -99;
   for (const r of refs) {
     const ry = y(r.v);
@@ -247,22 +239,24 @@ function drawChart(el, d) {
   hit.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") leave(); });
 }
 
+// ---------- 설정 ----------
 async function renderSettings() {
   const s = await api("/status");
   state.status = s;
   view.innerHTML = `
     <section class="card">
       <h2>알림 규칙</h2>
-      <div class="setting"><span class="k">매수 검토 알림</span><span class="v">1년 고점 대비 -${s.buy_zone_start}%부터 ${s.buy_zone_step}%p마다</span></div>
+      <div class="setting"><span class="k">알림</span><span class="v">1년 고점 대비 -5%부터 5%p마다</span></div>
+      <div class="setting"><span class="k"><span class="tag review">매수검토</span></span><span class="v">-5% ~ -15%</span></div>
+      <div class="setting"><span class="k"><span class="tag buy">매수권장</span></span><span class="v">-20%부터 끝까지</span></div>
       <div class="setting"><span class="k">같은 종목·같은 구간</span><span class="v">하루 최대 1번</span></div>
+      <div class="setting"><span class="k">경계선 여유</span><span class="v">${s.hysteresis}%p 이상 회복해야 구간 이탈</span></div>
       <div class="setting"><span class="k">하루 50% 이상 변동</span><span class="v">알림 대신 "데이터 확인"</span></div>
-      <div class="setting"><span class="k">보유 종목 알림</span><span class="v muted">2단계</span></div>
     </section>
     <section class="card">
       <h2>연결 상태</h2>
       <div class="setting"><span class="k">시세</span><span class="v">${esc(s.data_source)}</span></div>
-      <div class="setting"><span class="k">키움 계좌</span><span class="v muted">2단계에서 연결</span></div>
-      <div class="setting"><span class="k">마지막 확인</span><span class="v num">${s.last_check ? esc(s.last_check.replace("T", " ").slice(0, 16)) : "-"}</span></div>
+      <div class="setting"><span class="k">마지막 알림 확인</span><span class="v num">${s.last_check ? esc(s.last_check.replace("T", " ").slice(0, 16)) : "-"}</span></div>
     </section>
     <button class="btn" id="check-now">지금 확인하기</button>
     ${s.login_required ? `<button class="btn secondary" id="logout">로그아웃</button>` : ""}
@@ -307,7 +301,7 @@ async function refreshStatus() {
   const bar = $("#practice");
   bar.hidden = !s.is_practice;
   if (s.is_practice) {
-    const { stocks } = await api("/watchlist");
+    const { stocks } = await api("/board");
     const day = stocks.map((x) => x.date).sort().at(-1);
     $("#practice-date").textContent = `${day ? dayLabel(day) + " 장 · " : ""}실제 시세가 아닙니다`;
     document.querySelectorAll("[data-advance]").forEach((b) => (b.disabled = !s.can_advance));
@@ -349,19 +343,19 @@ $("#practice-reset").onclick = async () => {
 async function route() {
   if (document.body.classList.contains("logged-out")) return;
   const [, page = "home", arg] = location.hash.split("/");
-  const tab = page === "stock" ? null : page;
+  state.page = page;
+  const tab = page === "stock" || page === "settings" ? null : page;
   document.querySelectorAll(".tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
   $("#back").hidden = !(page === "stock" || page === "settings");
   $("#settings-btn").hidden = page === "settings";
   $("#title").textContent = TITLES[page] || "";
   try {
-    if (page === "watch") await renderWatch();
-    else if (page === "etf") renderStage("4단계에서 추가", "ETF Top 10", "규모(순자산) 상위 10개 ETF를 관심 종목과 같은 방식으로 보여줍니다. 알림 기준도 같습니다 (-30%부터 5%p마다).");
-    else if (page === "brief") renderStage("3단계에서 추가", "아침 브리핑", "매일 오전 9시, 밤사이 알림과 Top 10 이슈를 신문처럼 한 번에 모아 보여줍니다. 지난 브리핑도 날짜별로 다시 볼 수 있습니다.");
+    if (page === "etf") renderStage("4단계에서 추가", "ETF Top 10", "규모(순자산) 상위 10개 ETF를 Top 10과 같은 방식으로 보여줍니다. 알림 기준도 같습니다.");
+    else if (page === "brief") renderStage("3단계에서 추가", "아침 브리핑", "매일 오전 9시, 밤사이 알림과 Top 10 이슈를 신문처럼 한 번에 모아 보여줍니다.");
     else if (page === "alerts") await renderAlerts();
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg));
     else if (page === "settings") await renderSettings();
-    else await renderHome();
+    else { state.page = "home"; await renderHome(); }
   } catch (e) {
     if (e.message !== "login") view.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }

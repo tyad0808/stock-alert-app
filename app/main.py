@@ -11,10 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
-from .checker import run_check
-from .db import DB
+from .checker import quote, run_check
+from .db import DB, now_kst
 from .providers import get_provider
-from .rules import zone_price
+from .rules import tier, zone_price
 
 db = DB(config.DATA_DIR / "app.db")
 
@@ -83,36 +83,35 @@ def status(request: Request):
         "is_practice": provider.is_practice,
         "can_advance": getattr(provider, "can_advance", False),
         "last_check": db.get_meta("last_check"),
-        "buy_zone_start": config.BUY_ZONE_START,
-        "buy_zone_step": config.BUY_ZONE_STEP,
+        "tiers": [{"start": st, "key": k, "label": lb} for st, k, lb in config.TIERS],
+        "zone_step": config.ZONE_STEP,
+        "hysteresis": config.HYSTERESIS,
     }
 
 
-@app.get("/api/watchlist")
-def watchlist():
-    rows = db.snapshots()
-    watched = {s["symbol"] for s in config.load_watchlist()}
-    rows = [r for r in rows if r["symbol"] in watched]
-    # 하락률 큰 순서 (오류 데이터 종목은 마지막 정상 값 기준)
-    rows.sort(key=lambda r: r.get("drawdown", 0))
-    return {"stocks": rows, "last_check": db.get_meta("last_check")}
+def _quotes(provider) -> list[dict]:
+    return [quote(st, provider.daily_bars(st["symbol"])) for st in config.load_watchlist()]
+
+
+@app.get("/api/board")
+def board():
+    """시세판: Top 10 전체의 현재가와 1년 고점 대비. 알림과 상관없이 열 때마다 새로 계산한다."""
+    return {"stocks": _quotes(get_provider(db)), "updated": now_kst()}
 
 
 @app.get("/api/stock/{symbol}")
 def stock(symbol: str):
-    snap = db.get_snapshot(symbol)
-    if snap is None:
+    item = next((s for s in config.load_watchlist() if s["symbol"] == symbol), None)
+    if item is None:
         raise HTTPException(404, "감시 목록에 없는 종목입니다")
-    bars = get_provider(db).daily_bars(symbol)[-config.WINDOW_DAYS:]
-    high = snap.get("high")
-    zones = []
-    if high:
-        deepest = max(snap.get("next_level") or 0, 50)
-        for lv in range(config.BUY_ZONE_START, deepest + 1, config.BUY_ZONE_STEP):
-            zones.append({"level": lv, "price": round(zone_price(high, lv), 2)})
+    bars = get_provider(db).daily_bars(symbol)
+    q = quote(item, bars)
+    deepest = max(q["level"] or 0, 50) + config.ZONE_STEP
+    zones = [{"level": lv, "price": round(zone_price(q["high"], lv), 2), "tier": tier(lv)}
+             for lv in range(config.ZONE_START, deepest + 1, config.ZONE_STEP)]
     return {
-        **snap,
-        "series": [{"date": b.date, "close": b.close} for b in bars],
+        **q,
+        "series": [{"date": b.date, "close": b.close} for b in bars[-config.WINDOW_DAYS:]],
         "zones": zones,
         "alerts": db.alerts(symbol=symbol, limit=50),
     }

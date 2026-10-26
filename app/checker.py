@@ -4,13 +4,12 @@
 """
 
 from . import config
-from .alerts import is_outlier, newly_entered_zone
+from .alerts import held_level, is_outlier, newly_entered_zone
 from .db import DB, now_kst
 from .providers import get_provider
 from .providers.base import PriceProvider
-from .rules import Bar, drawdown_pct, high_52w, next_zone, zone_level, zone_price
+from .rules import Bar, drawdown_pct, high_52w, tier, zone_level
 
-BUY_REVIEW = "buy_review"
 DATA_CHECK = "data_check"
 
 
@@ -22,53 +21,57 @@ def _trusted_prev_close(bars: list[Bar]) -> float:
     return bars[i].close
 
 
-def check_stock(db: DB, stock: dict, bars: list[Bar]) -> dict | None:
-    """종목 하나를 확인한다. 새 알림이 생기면 그 알림을 돌려준다."""
-    symbol, name = stock["symbol"], stock["name"]
-    if len(bars) < 2:
-        return None
+def quote(stock: dict, bars: list[Bar]) -> dict:
+    """종목 하나의 지금 상태: 현재가, 1년 고점, 고점 대비 하락률, 구간. 알림과는 상관없이 계산만 한다."""
     today = bars[-1]
     price = today.close
     prev_close = _trusted_prev_close(bars)
-
-    if is_outlier(price, prev_close):
-        change = (price / prev_close - 1) * 100 if prev_close > 0 else 0
-        # 이전 정상 값은 그대로 두고 "확인 필요" 표시만 붙인다
-        db.save_snapshot(symbol, {
-            **(db.get_snapshot(symbol) or {}),
-            "symbol": symbol, "name": name, "data_warning": True, "date": today.date,
-        })
-        if db.alert_exists(symbol, DATA_CHECK, None, today.date):
-            return None
-        return db.add_alert(
-            market_date=today.date, kind=DATA_CHECK, symbol=symbol, name=name,
-            level=None, price=price, high=None, drawdown=None,
-            message=f"하루 {change:+.1f}% 변동 — 데이터 확인 필요 (알림 판단에서 제외)",
-        )
-
     high = high_52w(bars)
     dd = drawdown_pct(price, high)
-    level = zone_level(dd)
+    warn = is_outlier(price, prev_close)
+    level = None if warn else zone_level(dd)
+    return {
+        "symbol": stock["symbol"], "name": stock["name"], "date": today.date,
+        "price": price, "prev_close": prev_close,
+        "change_pct": round((price / prev_close - 1) * 100, 2) if prev_close > 0 else 0,
+        "high": high, "drawdown": round(dd, 2),
+        "new_high": price >= high,
+        "level": level, "tier": tier(level),
+        "data_warning": warn,
+    }
+
+
+def check_stock(db: DB, stock: dict, bars: list[Bar]) -> dict | None:
+    """종목 하나를 확인한다. 새 알림이 생기면 그 알림을 돌려준다."""
+    if len(bars) < 2:
+        return None
+    q = quote(stock, bars)
+    symbol, name, day = q["symbol"], q["name"], q["date"]
+
+    if q["data_warning"]:
+        # 구간 기록은 그대로 두고 "확인 필요"만 알린다
+        if db.alert_exists(symbol, DATA_CHECK, None, day):
+            return None
+        return db.add_alert(
+            market_date=day, kind=DATA_CHECK, symbol=symbol, name=name,
+            level=None, price=q["price"], high=None, drawdown=None,
+            message=f"하루 {q['change_pct']:+.1f}% 변동 — 데이터 확인 필요 (알림 판단에서 제외)",
+        )
+
     prev_level = db.get_level(symbol)
+    level = held_level(prev_level, q["drawdown"])
     entered = newly_entered_zone(prev_level, level)
     db.set_level(symbol, level)
+    if entered is None:
+        return None
 
-    nxt = next_zone(level)
-    db.save_snapshot(symbol, {
-        "symbol": symbol, "name": name, "date": today.date,
-        "price": price, "prev_close": prev_close,
-        "change_pct": round((price / prev_close - 1) * 100, 2),
-        "high": high, "drawdown": round(dd, 2), "level": level,
-        "next_level": nxt, "next_price": round(zone_price(high, nxt), 2),
-        "data_warning": False,
-    })
-
-    if entered is None or db.alert_exists(symbol, BUY_REVIEW, entered, today.date):
+    kind = tier(entered)["key"]
+    if db.alert_exists(symbol, kind, entered, day):
         return None
     return db.add_alert(
-        market_date=today.date, kind=BUY_REVIEW, symbol=symbol, name=name,
-        level=entered, price=price, high=high, drawdown=round(dd, 2),
-        message=f"1년 고점 대비 -{entered}% 진입 · 현재가 ${price:,.2f} / 1년 고점 ${high:,.2f}",
+        market_date=day, kind=kind, symbol=symbol, name=name,
+        level=entered, price=q["price"], high=q["high"], drawdown=q["drawdown"],
+        message=f"1년 고점 대비 -{entered}% 진입 · 현재가 ${q['price']:,.2f} / 1년 고점 ${q['high']:,.2f}",
     )
 
 

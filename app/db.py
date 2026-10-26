@@ -1,6 +1,5 @@
-"""기록 저장소 (SQLite). 종목별 현재 구간, 알림 이력, 마지막 확인 결과를 남긴다."""
+"""기록 저장소 (SQLite). 종목별 현재 구간과 알림 이력을 남긴다."""
 
-import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,15 +11,10 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- 종목별로 지금 들어가 있는 가장 깊은 매수 검토 구간 (없으면 NULL)
+-- 종목별로 지금 들어가 있는 가장 깊은 알림 구간, 경계선 여유 반영 (없으면 NULL)
 CREATE TABLE IF NOT EXISTS zone_state (
     symbol TEXT PRIMARY KEY,
     level INTEGER
-);
--- 관심 종목 화면에 보여줄 마지막 확인 결과
-CREATE TABLE IF NOT EXISTS snapshot (
-    symbol TEXT PRIMARY KEY,
-    data TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS alert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,21 +59,6 @@ class DB:
         self.conn.execute("REPLACE INTO zone_state (symbol, level) VALUES (?, ?)", (symbol, level))
         self.conn.commit()
 
-    def save_snapshot(self, symbol: str, data: dict) -> None:
-        self.conn.execute(
-            "REPLACE INTO snapshot (symbol, data) VALUES (?, ?)",
-            (symbol, json.dumps(data, ensure_ascii=False)),
-        )
-        self.conn.commit()
-
-    def get_snapshot(self, symbol: str) -> dict | None:
-        row = self.conn.execute("SELECT data FROM snapshot WHERE symbol = ?", (symbol,)).fetchone()
-        return json.loads(row["data"]) if row else None
-
-    def snapshots(self) -> list[dict]:
-        rows = self.conn.execute("SELECT data FROM snapshot").fetchall()
-        return [json.loads(r["data"]) for r in rows]
-
     def alert_exists(self, symbol: str, kind: str, level: int | None, market_date: str) -> bool:
         row = self.conn.execute(
             "SELECT 1 FROM alert WHERE symbol = ? AND kind = ? AND level IS ? AND market_date = ?",
@@ -106,5 +85,5 @@ class DB:
 
     def reset(self) -> None:
         """연습을 처음부터 다시 할 때 쓴다."""
-        self.conn.executescript("DELETE FROM zone_state; DELETE FROM snapshot; DELETE FROM alert; DELETE FROM meta;")
+        self.conn.executescript("DELETE FROM zone_state; DELETE FROM alert; DELETE FROM meta;")
         self.conn.commit()

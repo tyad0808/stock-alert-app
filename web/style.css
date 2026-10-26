@@ -7,12 +7,15 @@
   --text: #0b0b0b;
   --text-2: #52514e;
   --text-3: #8a8983;
-  --accent: #4b3fd0;          /* 매수 검토 구간 강조 */
-  --accent-soft: #ecebfb;
-  --up: #d92d2d;              /* 상승 (국내 관례: 빨강) */
-  --down: #2a66d6;            /* 하락 (국내 관례: 파랑) */
-  --warn: #b25e00;
-  --warn-soft: #fdf0de;
+  --high: #6250d6;            /* 1년 고점 */
+  --buy: #d92d2d;             /* 매수권장 */
+  --buy-soft: #fdeaea;
+  --review: #d4600f;          /* 매수검토 */
+  --review-soft: #fdeedf;
+  --up: #d92d2d;              /* 전일 대비 상승 (국내 관례: 빨강) */
+  --down: #2a66d6;            /* 전일 대비 하락 (국내 관례: 파랑) */
+  --warn: #8a6100;
+  --warn-soft: #fbf3d2;
   --series: #2a78d6;
   --radius: 16px;
   --tab-h: 64px;
@@ -28,12 +31,15 @@
     --text: #f0efec;
     --text-2: #c3c2b7;
     --text-3: #8f8e86;
-    --accent: #9a90f0;
-    --accent-soft: #2b2850;
+    --high: #a49bf2;
+    --buy: #ff6b6b;
+    --buy-soft: #3b1c1c;
+    --review: #f5924f;
+    --review-soft: #3a2617;
     --up: #f06767;
     --down: #6aa0ff;
-    --warn: #f0a33c;
-    --warn-soft: #3a2a12;
+    --warn: #e3b93e;
+    --warn-soft: #322a12;
     --series: #3987e5;
   }
 }
@@ -46,12 +52,15 @@
   --text: #f0efec;
   --text-2: #c3c2b7;
   --text-3: #8f8e86;
-  --accent: #9a90f0;
-  --accent-soft: #2b2850;
+  --high: #a49bf2;
+  --buy: #ff6b6b;
+  --buy-soft: #3b1c1c;
+  --review: #f5924f;
+  --review-soft: #3a2617;
   --up: #f06767;
   --down: #6aa0ff;
-  --warn: #f0a33c;
-  --warn-soft: #3a2a12;
+  --warn: #e3b93e;
+  --warn-soft: #322a12;
   --series: #3987e5;
 }
 
@@ -93,17 +102,18 @@ a { color: inherit; }
 /* 연습 모드 띠 */
 .practice {
   margin: 0 16px 8px; padding: 10px 12px;
-  border-radius: 12px; background: var(--warn-soft);
+  border-radius: 12px; border: 1.5px dashed var(--text-3);
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
 }
 .practice-text { flex: 1 1 140px; display: flex; flex-direction: column; font-size: 13px; color: var(--text-2); }
-.practice-text strong { color: var(--warn); font-size: 14px; }
+.practice-text strong { color: var(--text); font-size: 14px; }
 .practice-actions { display: flex; gap: 6px; }
 .chip {
   border: 0; border-radius: 999px; padding: 8px 12px; min-height: 36px;
-  background: var(--surface); font-size: 14px; font-weight: 600; cursor: pointer;
+  background: var(--surface-2); font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .chip.ghost { background: transparent; color: var(--text-2); }
+.chip.on { background: var(--text); color: var(--bg); }
 .chip:disabled { opacity: .45; }
 
 main { padding: 0 16px 24px; outline: none; }
@@ -115,68 +125,70 @@ main { padding: 0 16px 24px; outline: none; }
 }
 .card h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -0.01em; }
 .card p { margin: 0; color: var(--text-2); font-size: 15px; }
-.section-title {
-  display: flex; justify-content: space-between; align-items: baseline;
-  margin: 20px 4px 8px; font-size: 15px; font-weight: 700; color: var(--text-2);
-}
-.section-title a { font-size: 14px; font-weight: 600; color: var(--text-3); text-decoration: none; }
+.section-title { margin: 20px 4px 8px; font-size: 15px; font-weight: 700; color: var(--text-2); }
 .muted { color: var(--text-3); font-size: 13px; }
-
-.hero { padding: 20px 16px; }
-.hero .label { font-size: 14px; color: var(--text-2); }
-.hero .big { font-size: 32px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0; }
-
 .stage {
   display: inline-block; font-size: 12px; font-weight: 700;
   padding: 3px 8px; border-radius: 6px; margin-bottom: 8px;
   background: var(--surface-2); color: var(--text-2);
 }
 
-/* 종목 행 */
-.list { background: var(--surface); border-radius: var(--radius); overflow: hidden; }
-.row {
-  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px;
-  padding: 14px 16px; text-decoration: none; position: relative;
+/* 시세판 머리 */
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+.board-time { font-size: 13px; color: var(--text-2); }
+.board-time b { color: var(--text); }
+.sort { display: flex; gap: 4px; }
+.sort .chip { min-height: 32px; padding: 6px 10px; font-size: 13px; }
+.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.sum { border-radius: 14px; padding: 12px 14px; border: 2px solid; }
+.sum .k { font-size: 13px; font-weight: 700; }
+.sum .v { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+.sum .v small { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.sum.buy { border-color: var(--buy); background: var(--buy-soft); color: var(--buy); }
+.sum.review { border-color: var(--review); background: var(--review-soft); color: var(--review); }
+
+/* 종목 카드 (시세판 한 줄) */
+.stock {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline;
+  background: var(--surface); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+  text-decoration: none; border: 2px solid transparent;
 }
-.row + .row { border-top: 1px solid var(--line); }
-.row:active { background: var(--surface-2); }
-.row .name { font-weight: 700; font-size: 16px; }
-.row .sym { color: var(--text-3); font-size: 13px; margin-left: 6px; font-weight: 500; }
-.row .price { text-align: right; font-weight: 600; }
-.row .sub { color: var(--text-2); font-size: 13px; }
-.row .chg { text-align: right; font-size: 13px; }
-.row.in-zone { background: var(--accent-soft); }
-.row.in-zone::before {
-  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
-  width: 4px; border-radius: 0 4px 4px 0; background: var(--accent);
-}
+.stock:active { filter: brightness(.97); }
+.stock.buy { border-color: var(--buy); background: var(--buy-soft); }
+.stock.review { border-color: var(--review); background: var(--review-soft); }
+.stock .name { font-weight: 700; font-size: 17px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.stock .sym { color: var(--text-3); font-size: 13px; font-weight: 500; }
+.stock .price { text-align: right; font-weight: 700; font-size: 17px; }
+.stock .chg { text-align: right; font-size: 13px; font-weight: 600; }
+.stock .high { font-size: 14px; color: var(--text-2); }
+.stock .high b { color: var(--high); font-weight: 800; }
+.stock .dd { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.stock .dd .k { font-size: 14px; color: var(--text-2); }
+.stock .dd .v { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.stock.buy .dd .v { color: var(--buy); }
+.stock.review .dd .v { color: var(--review); }
 .up { color: var(--up); }
 .down { color: var(--down); }
 
-.dd { display: flex; align-items: center; gap: 10px; grid-column: 1 / -1; margin-top: 8px; }
-.dd-val { font-weight: 800; font-size: 18px; min-width: 64px; letter-spacing: -0.02em; }
-.in-zone .dd-val { color: var(--accent); }
-.meter { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); position: relative; }
-.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--text-3); }
-.in-zone .meter .fill { background: var(--accent); }
-.meter .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-2); border-radius: 1px; }
-.meter-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); grid-column: 1 / -1; padding-left: 74px; }
-
 .tag {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 6px; line-height: 1.3;
 }
-.tag.zone { background: var(--accent); color: var(--surface); }
+.tag.buy { background: var(--buy); color: #fff; }
+.tag.review { background: var(--review); color: #fff; }
+.tag.drop { background: var(--surface-2); color: var(--text-2); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
-.tag.new { background: var(--up); color: #fff; }
-.next { grid-column: 1 / -1; font-size: 13px; color: var(--text-2); margin-top: 4px; }
+.tag.newhigh { background: var(--high); color: #fff; }
+.tag.big { font-size: 14px; padding: 4px 10px; }
 
 /* 알림 */
 .alert-day { margin: 18px 4px 8px; font-size: 13px; font-weight: 700; color: var(--text-3); }
 .alert {
   display: block; text-decoration: none; background: var(--surface);
-  border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+  border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; border: 2px solid transparent;
 }
+.alert.buy { border-color: var(--buy); }
+.alert.review { border-color: var(--review); }
 .alert:active { background: var(--surface-2); }
 .alert-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .alert-head strong { font-size: 16px; }
@@ -187,19 +199,22 @@ main { padding: 0 16px 24px; outline: none; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
 .stat { background: var(--surface-2); border-radius: 12px; padding: 10px; }
 .stat .k { font-size: 12px; color: var(--text-2); }
-.stat .v { font-size: 16px; font-weight: 700; }
+.stat .v { font-size: 17px; font-weight: 800; }
+.stat.high .v { color: var(--high); }
 
 .chart-wrap { position: relative; touch-action: pan-y; }
 .chart-wrap svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart-wrap .grid { stroke: var(--line); stroke-width: 1; }
 .chart-wrap .axis { fill: var(--text-3); font-size: 11px; }
 .chart-wrap .line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.chart-wrap .ref { stroke-width: 1.5; stroke-dasharray: 4 4; }
-.chart-wrap .ref.high { stroke: var(--text-2); }
-.chart-wrap .ref.zone { stroke: var(--accent); opacity: .7; }
-.chart-wrap .ref-label { font-size: 11px; font-weight: 600; }
-.chart-wrap .ref-label.high { fill: var(--text-2); }
-.chart-wrap .ref-label.zone { fill: var(--accent); }
+.chart-wrap .ref { stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart-wrap .ref.high { stroke: var(--high); stroke-width: 2; stroke-dasharray: none; }
+.chart-wrap .ref.review { stroke: var(--review); }
+.chart-wrap .ref.buy { stroke: var(--buy); }
+.chart-wrap .ref-label { font-size: 11px; font-weight: 700; }
+.chart-wrap .ref-label.high { fill: var(--high); }
+.chart-wrap .ref-label.review { fill: var(--review); }
+.chart-wrap .ref-label.buy { fill: var(--buy); }
 .chart-wrap .now { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
 .chart-wrap .cross { stroke: var(--text-3); stroke-width: 1; }
 .chart-wrap .hover-dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
@@ -214,9 +229,10 @@ main { padding: 0 16px 24px; outline: none; }
 
 table.zones { width: 100%; border-collapse: collapse; font-size: 15px; }
 table.zones th { text-align: left; font-size: 12px; color: var(--text-3); font-weight: 600; padding: 0 0 8px; }
-table.zones td { padding: 10px 0; border-top: 1px solid var(--line); }
+table.zones td { padding: 9px 0; border-top: 1px solid var(--line); }
 table.zones td:last-child, table.zones th:last-child { text-align: right; }
-table.zones tr.hit td { color: var(--accent); font-weight: 700; }
+table.zones tr.hit td:first-child { font-weight: 800; }
+table.zones .lbl { margin-left: 6px; }
 
 /* 설정 */
 .setting { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
@@ -226,7 +242,7 @@ table.zones tr.hit td { color: var(--accent); font-weight: 700; }
 .btn {
   display: block; width: 100%; border: 0; border-radius: 12px;
   padding: 14px; min-height: 48px; font-size: 16px; font-weight: 700; cursor: pointer;
-  background: var(--accent); color: var(--surface);
+  background: var(--text); color: var(--bg);
 }
 .btn.secondary { background: var(--surface-2); color: var(--text); }
 .btn + .btn { margin-top: 8px; }
@@ -237,12 +253,12 @@ table.zones tr.hit td { color: var(--accent); font-weight: 700; }
   width: 100%; font: inherit; font-size: 18px; padding: 14px; margin: 16px 0 10px;
   border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--text);
 }
-.error { color: var(--up); font-size: 14px; min-height: 20px; }
+.error { color: var(--buy); font-size: 14px; min-height: 20px; }
 
 /* 하단 탭 */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   height: calc(var(--tab-h) + var(--safe-b)); padding-bottom: var(--safe-b);
   background: var(--surface); border-top: 1px solid var(--line);
 }
@@ -256,7 +272,7 @@ table.zones tr.hit td { color: var(--accent); font-weight: 700; }
 .badge {
   position: absolute; top: 8px; left: calc(50% + 6px);
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-  background: var(--up); color: #fff; font-size: 11px; font-style: normal; font-weight: 700;
+  background: var(--buy); color: #fff; font-size: 11px; font-style: normal; font-weight: 700;
   display: grid; place-items: center;
 }
 
