@@ -8,10 +8,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import config
-from .checker import quote, run_check
+from .checker import holding_quote, quote, run_check, split_for
 from .db import DB, now_kst
 from .providers import get_provider
 from .rules import tier, zone_price
@@ -86,35 +86,95 @@ def status(request: Request):
         "tiers": [{"start": st, "key": k, "label": lb} for st, k, lb in config.TIERS],
         "zone_step": config.ZONE_STEP,
         "hysteresis": config.HYSTERESIS,
+        "profit_step": config.PROFIT_STEP,
+        "loss_step": config.LOSS_STEP,
     }
-
-
-def _quotes(provider) -> list[dict]:
-    return [quote(st, provider.daily_bars(st["symbol"])) for st in config.load_watchlist()]
 
 
 @app.get("/api/board")
 def board():
     """시세판: Top 10 전체의 현재가와 1년 고점 대비. 알림과 상관없이 열 때마다 새로 계산한다."""
-    return {"stocks": _quotes(get_provider(db)), "updated": now_kst()}
+    provider = get_provider(db)
+    held = {h["symbol"] for h in provider.holdings()}
+    stocks = [{**quote(st, provider.daily_bars(st["symbol"])), "held": st["symbol"] in held}
+              for st in config.load_watchlist()]
+    return {"stocks": stocks, "updated": now_kst()}
+
+
+@app.get("/api/holdings")
+def holdings():
+    """내 종목: 평단 대비 수익률과 평가금액. 계좌에서 조회만 한다."""
+    provider = get_provider(db)
+    fx = provider.fx_rate()
+    top10 = {s["symbol"] for s in config.load_watchlist()}
+    rows = [{**holding_quote(h, provider.daily_bars(h["symbol"])), "in_top10": h["symbol"] in top10}
+            for h in provider.holdings()]
+    value = sum(r["value_usd"] for r in rows)
+    cost = sum(r["cost_usd"] for r in rows)
+    prev = sum(r["prev_close"] * r["qty"] for r in rows)
+    return {
+        "holdings": sorted(rows, key=lambda r: -r["value_usd"]),
+        "total": {
+            "value_usd": round(value, 2), "cost_usd": round(cost, 2),
+            "profit_usd": round(value - cost, 2),
+            "return_pct": round((value / cost - 1) * 100, 2) if cost else 0,
+            "day_change_pct": round((value / prev - 1) * 100, 2) if prev else 0,
+            "value_krw": round(value * fx) if fx else None,
+        },
+        "fx": fx,
+        "updated": now_kst(),
+    }
 
 
 @app.get("/api/stock/{symbol}")
 def stock(symbol: str):
-    item = next((s for s in config.load_watchlist() if s["symbol"] == symbol), None)
-    if item is None:
-        raise HTTPException(404, "감시 목록에 없는 종목입니다")
-    bars = get_provider(db).daily_bars(symbol)
-    q = quote(item, bars)
+    provider = get_provider(db)
+    top10 = next((s for s in config.load_watchlist() if s["symbol"] == symbol), None)
+    held = next((h for h in provider.holdings() if h["symbol"] == symbol), None)
+    if top10 is None and held is None:
+        raise HTTPException(404, "감시 목록이나 내 종목에 없는 종목입니다")
+    bars = provider.daily_bars(symbol)
+    q = quote(top10 or held, bars)
     deepest = max(q["level"] or 0, 50) + config.ZONE_STEP
     zones = [{"level": lv, "price": round(zone_price(q["high"], lv), 2), "tier": tier(lv)}
              for lv in range(config.ZONE_START, deepest + 1, config.ZONE_STEP)]
+    holding = None
+    if held:
+        holding = holding_quote(held, bars)
+        top = max(holding["pl_level"] or 0, 0) + 2 * config.PROFIT_STEP
+        avg = held["avg_price"]
+        holding["pl_prices"] = (
+            [{"level": lv, "price": round(avg * (1 + lv / 100), 2)}
+             for lv in range(config.PROFIT_STEP, top + 1, config.PROFIT_STEP)]
+            + [{"level": -lv, "price": round(avg * (1 - lv / 100), 2)}
+               for lv in range(config.LOSS_STEP, 80, config.LOSS_STEP)]
+        )
     return {
         **q,
+        "in_top10": top10 is not None,
         "series": [{"date": b.date, "close": b.close} for b in bars[-config.WINDOW_DAYS:]],
         "zones": zones,
+        "holding": holding,
+        "split": split_for(db, symbol, q["price"], provider.fx_rate(), held),
+        "fx": provider.fx_rate(),
         "alerts": db.alerts(symbol=symbol, limit=50),
     }
+
+
+class SplitBody(BaseModel):
+    total_krw: int = Field(ge=0, le=10_000_000_000)
+
+
+@app.post("/api/split/{symbol}")
+def set_split(symbol: str, body: SplitBody):
+    """3분할 총 투자금 저장 (0이면 삭제). 주문과는 무관한 메모다."""
+    provider = get_provider(db)
+    held = next((h for h in provider.holdings() if h["symbol"] == symbol), None)
+    if held is None and not any(s["symbol"] == symbol for s in config.load_watchlist()):
+        raise HTTPException(404, "감시 목록이나 내 종목에 없는 종목입니다")
+    db.set_split_total(symbol, body.total_krw)
+    bars = provider.daily_bars(symbol)
+    return {"split": split_for(db, symbol, bars[-1].close, provider.fx_rate(), held)}
 
 
 @app.get("/api/alerts")

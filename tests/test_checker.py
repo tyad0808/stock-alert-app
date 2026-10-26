@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.checker import DATA_CHECK, check_stock, quote
+from app.checker import DATA_CHECK, LOSS, PROFIT, check_holding, check_stock, quote
 from app.db import DB
 from app.rules import Bar
 
@@ -105,3 +105,38 @@ def test_day_after_outlier_uses_trusted_close(db):
     # 다음 날 정상 가격 $194: 오류 값 $60이 아니라 $195와 비교 → 이상값 아님
     assert check_stock(db, STOCK, bars(195, 60, 194)) is None
     assert quote(STOCK, bars(195, 60, 194))["data_warning"] is False
+
+
+# ---------- 내 종목 ----------
+
+HOLD = {"symbol": "TEST", "name": "테스트", "qty": 10, "avg_price": 100.0}
+
+
+def hbars(*closes):
+    return [Bar(f"2026-03-{i + 1:02d}", c, c) for i, c in enumerate(closes)]
+
+
+def test_holding_profit_steps(db):
+    assert check_holding(db, HOLD, hbars(100, 105)) is None           # +5%
+    a = check_holding(db, HOLD, hbars(100, 105, 111))                 # +11%
+    assert a["kind"] == PROFIT and a["level"] == 10
+    assert "보유 10주" in a["message"]
+    a = check_holding(db, HOLD, hbars(100, 105, 111, 121))            # +21%
+    assert a["level"] == 20
+
+
+def test_holding_loss_steps(db):
+    assert check_holding(db, HOLD, hbars(100, 85)) is None            # -15%
+    a = check_holding(db, HOLD, hbars(100, 85, 79))                   # -21%
+    assert a["kind"] == LOSS and a["level"] == -20
+    assert "-20%" in a["message"]
+
+
+def test_holding_avg_change_resets_quietly(db):
+    check_holding(db, HOLD, hbars(100, 111))                          # +10 알림
+    # 추가 매수로 평단 $100 → $90: 현재가 $111은 새 평단 대비 +23%지만 바뀐 순간엔 알리지 않음
+    new_avg = {**HOLD, "avg_price": 90.0, "qty": 20}
+    assert check_holding(db, new_avg, hbars(100, 111, 111)) is None
+    assert db.get_holding_state("TEST") == {"level": 20, "avg_price": 90.0}
+    # 이후 +30% 진입은 새 평단 기준으로 알림
+    assert check_holding(db, new_avg, hbars(100, 111, 111, 118))["level"] == 30

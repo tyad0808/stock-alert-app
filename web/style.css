@@ -17,6 +17,7 @@
   --warn: #8a6100;
   --warn-soft: #fbf3d2;
   --series: #2a78d6;
+  --avg: #0f8a5f;             /* 내 평단 */
   --radius: 16px;
   --tab-h: 64px;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -41,6 +42,7 @@
     --warn: #e3b93e;
     --warn-soft: #322a12;
     --series: #3987e5;
+    --avg: #3ccf95;
   }
 }
 :root[data-theme="dark"] {
@@ -62,6 +64,7 @@
   --warn: #e3b93e;
   --warn-soft: #322a12;
   --series: #3987e5;
+  --avg: #3ccf95;
 }
 
 * { box-sizing: border-box; }
@@ -180,6 +183,10 @@ main { padding: 0 16px 24px; outline: none; }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 .tag.newhigh { background: var(--high); color: #fff; }
 .tag.big { font-size: 14px; padding: 4px 10px; }
+.tag.profit { background: var(--up); color: #fff; }
+.tag.loss { background: var(--down); color: #fff; }
+.tag.held { background: transparent; color: var(--avg); border: 1.5px solid var(--avg); padding: 2px 6px; }
+.tag.out { background: var(--surface-2); color: var(--text-2); }
 
 /* 알림 */
 .alert-day { margin: 18px 4px 8px; font-size: 13px; font-weight: 700; color: var(--text-3); }
@@ -189,6 +196,8 @@ main { padding: 0 16px 24px; outline: none; }
 }
 .alert.buy { border-color: var(--buy); }
 .alert.review { border-color: var(--review); }
+.alert.profit { border-color: var(--up); }
+.alert.loss { border-color: var(--down); }
 .alert:active { background: var(--surface-2); }
 .alert-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .alert-head strong { font-size: 16px; }
@@ -215,6 +224,8 @@ main { padding: 0 16px 24px; outline: none; }
 .chart-wrap .ref-label.high { fill: var(--high); }
 .chart-wrap .ref-label.review { fill: var(--review); }
 .chart-wrap .ref-label.buy { fill: var(--buy); }
+.chart-wrap .ref.avg { stroke: var(--avg); stroke-width: 2; stroke-dasharray: 2 3; }
+.chart-wrap .ref-label.avg { fill: var(--avg); }
 .chart-wrap .now { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
 .chart-wrap .cross { stroke: var(--text-3); stroke-width: 1; }
 .chart-wrap .hover-dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
@@ -233,6 +244,40 @@ table.zones td { padding: 9px 0; border-top: 1px solid var(--line); }
 table.zones td:last-child, table.zones th:last-child { text-align: right; }
 table.zones tr.hit td:first-child { font-weight: 800; }
 table.zones .lbl { margin-left: 6px; }
+
+/* 내 종목 */
+.total .k { font-size: 14px; color: var(--text-2); }
+.total .big { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0; }
+.total .krw { font-size: 15px; color: var(--text-2); }
+.total .row2 { display: flex; gap: 16px; margin-top: 10px; font-size: 15px; }
+.total .row2 b { font-weight: 800; }
+.mine {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline;
+  background: var(--surface); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+  text-decoration: none; border: 2px solid transparent;
+}
+.mine.profit { border-color: var(--up); }
+.mine.loss { border-color: var(--down); }
+.mine .name { font-weight: 700; font-size: 17px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.mine .sym { color: var(--text-3); font-size: 13px; font-weight: 500; }
+.mine .ret { text-align: right; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.mine .sub { font-size: 14px; color: var(--text-2); }
+.mine .sub b { color: var(--avg); }
+.mine .val { text-align: right; font-size: 14px; color: var(--text-2); }
+
+/* 3분할 계산기 */
+.split-form { display: flex; gap: 8px; margin: 10px 0 4px; }
+.split-form input {
+  flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.split-form .btn { width: auto; padding: 12px 16px; }
+table.split { width: 100%; border-collapse: collapse; font-size: 15px; margin-top: 8px; }
+table.split th { text-align: left; font-size: 12px; color: var(--text-3); font-weight: 600; padding: 0 0 6px; }
+table.split td { padding: 10px 0; border-top: 1px solid var(--line); }
+table.split td:not(:first-child), table.split th:not(:first-child) { text-align: right; }
+table.split tr.done td { color: var(--text-3); }
+table.split tr.next td { font-weight: 800; }
 
 /* 설정 */
 .setting { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; }
@@ -258,7 +303,7 @@ table.zones .lbl { margin-left: 6px; }
 /* 하단 탭 */
 .tabs {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   height: calc(var(--tab-h) + var(--safe-b)); padding-bottom: var(--safe-b);
   background: var(--surface); border-top: 1px solid var(--line);
 }

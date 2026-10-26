@@ -1,4 +1,6 @@
-"""기록 저장소 (SQLite). 종목별 현재 구간과 알림 이력을 남긴다."""
+"""기록 저장소 (SQLite). 종목별 현재 구간, 3분할 계획, 알림 이력을 남긴다.
+
+연습 "처음부터"는 구간·알림 기록만 지우고 3분할 계획은 남긴다."""
 
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -15,6 +17,17 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE TABLE IF NOT EXISTS zone_state (
     symbol TEXT PRIMARY KEY,
     level INTEGER
+);
+-- 내 종목별 지금 들어가 있는 수익(+)·손실(-) 구간과 그때의 평단
+CREATE TABLE IF NOT EXISTS holding_state (
+    symbol TEXT PRIMARY KEY,
+    level INTEGER,
+    avg_price REAL NOT NULL
+);
+-- 종목별 3분할 총 투자금 (원)
+CREATE TABLE IF NOT EXISTS split_plan (
+    symbol TEXT PRIMARY KEY,
+    total_krw INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS alert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +72,26 @@ class DB:
         self.conn.execute("REPLACE INTO zone_state (symbol, level) VALUES (?, ?)", (symbol, level))
         self.conn.commit()
 
+    def get_holding_state(self, symbol: str) -> dict | None:
+        row = self.conn.execute("SELECT level, avg_price FROM holding_state WHERE symbol = ?", (symbol,)).fetchone()
+        return dict(row) if row else None
+
+    def set_holding_state(self, symbol: str, level: int | None, avg_price: float) -> None:
+        self.conn.execute("REPLACE INTO holding_state (symbol, level, avg_price) VALUES (?, ?, ?)",
+                          (symbol, level, avg_price))
+        self.conn.commit()
+
+    def get_split_total(self, symbol: str) -> int | None:
+        row = self.conn.execute("SELECT total_krw FROM split_plan WHERE symbol = ?", (symbol,)).fetchone()
+        return row["total_krw"] if row else None
+
+    def set_split_total(self, symbol: str, total_krw: int | None) -> None:
+        if total_krw:
+            self.conn.execute("REPLACE INTO split_plan (symbol, total_krw) VALUES (?, ?)", (symbol, total_krw))
+        else:
+            self.conn.execute("DELETE FROM split_plan WHERE symbol = ?", (symbol,))
+        self.conn.commit()
+
     def alert_exists(self, symbol: str, kind: str, level: int | None, market_date: str) -> bool:
         row = self.conn.execute(
             "SELECT 1 FROM alert WHERE symbol = ? AND kind = ? AND level IS ? AND market_date = ?",
@@ -85,5 +118,5 @@ class DB:
 
     def reset(self) -> None:
         """연습을 처음부터 다시 할 때 쓴다."""
-        self.conn.executescript("DELETE FROM zone_state; DELETE FROM alert; DELETE FROM meta;")
+        self.conn.executescript("DELETE FROM zone_state; DELETE FROM holding_state; DELETE FROM alert; DELETE FROM meta;")
         self.conn.commit()

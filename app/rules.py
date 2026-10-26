@@ -53,3 +53,43 @@ def tier(level: int | None) -> dict | None:
 def zone_price(high: float, level: int) -> float:
     """해당 구간에 들어가는 가격. 예: 고점 $200, 35구간 → $130"""
     return high * (1 - level / 100)
+
+
+def return_pct(price: float, avg_price: float) -> float:
+    """평단 대비 수익률(%). 예: 평단 $100, 현재가 $115 → +15.0"""
+    return (price / avg_price - 1) * 100
+
+
+def pl_level(ret: float) -> int | None:
+    """내 종목 알림 구간. 수익이면 양수, 손실이면 음수, 둘 다 아니면 None.
+
+    예: +9.9 → None, +10 → 10, +27 → 20, -19.9 → None, -20 → -20, -45 → -40
+    """
+    r = round(ret, 6)
+    if r >= config.PROFIT_STEP:
+        return config.PROFIT_STEP * math.floor(r / config.PROFIT_STEP)
+    if r <= -config.LOSS_STEP:
+        return -config.LOSS_STEP * math.floor(-r / config.LOSS_STEP)
+    return None
+
+
+def split_plan(total_krw: int, invested_krw: float, price_krw: float) -> dict:
+    """3분할(30/30/40) 계획. 지금까지 산 금액으로 몇 차까지 샀는지 표시한다.
+
+    한 차수 금액의 95% 이상 샀으면 그 차수는 산 것으로 본다 (환율·주수 단위 오차 감안).
+    """
+    parts, cum = [], 0
+    for n, ratio in enumerate(config.SPLIT_RATIOS, start=1):
+        amount = round(total_krw * ratio / 100)
+        cum += amount
+        parts.append({
+            "n": n, "ratio": ratio, "amount": amount,
+            "shares": round(amount / price_krw, 1) if price_krw > 0 else None,
+            "done": invested_krw >= cum - amount * 0.05,
+        })
+    nxt = next((p for p in parts if not p["done"]), None)
+    return {
+        "total": total_krw, "parts": parts,
+        "invested": round(invested_krw), "remaining": max(0, round(total_krw - invested_krw)),
+        "next": nxt,
+    }

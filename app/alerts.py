@@ -1,7 +1,7 @@
 """알림 필터: 언제 알릴지, 언제 막을지 정한다."""
 
 from . import config
-from .rules import zone_level
+from .rules import pl_level, zone_level
 
 
 def held_level(prev_level: int | None, drawdown: float) -> int | None:
@@ -16,6 +16,40 @@ def held_level(prev_level: int | None, drawdown: float) -> int | None:
     # 딱 2%p 회복한 경우도 벗어난 것으로 보도록 아주 작은 값을 더한다
     held = zone_level(drawdown - config.HYSTERESIS + 1e-6)
     return None if held is None else min(prev_level, held)
+
+
+def held_pl_level(prev_level: int | None, ret: float) -> int | None:
+    """내 종목 구간에 경계선 여유를 둔 값.
+
+    수익 구간은 기준보다 2%p 이상 내려와야, 손실 구간은 2%p 이상 올라와야 벗어난 것으로 본다.
+    예: +20% 구간에서 +18.5%로 내려옴 → 아직 20 / +17.9% → 10
+    """
+    now = pl_level(ret)
+    if prev_level is None:
+        return now
+    h, eps = config.HYSTERESIS, 1e-6
+    if prev_level > 0:
+        if now is not None and (now >= prev_level or now < 0):
+            return now
+        held = pl_level(ret + h - eps)
+        return min(prev_level, held) if held and held > 0 else now
+    if now is not None and (now <= prev_level or now > 0):
+        return now
+    held = pl_level(ret - h + eps)
+    return max(prev_level, held) if held and held < 0 else now
+
+
+def newly_entered_pl(prev_level: int | None, new_level: int | None) -> int | None:
+    """내 종목: 새로 들어간 수익·손실 구간. 수익은 더 높아질 때, 손실은 더 깊어질 때만 알린다."""
+    if new_level is None:
+        return None
+    if prev_level is None:
+        return new_level
+    if new_level > 0 and new_level > prev_level:
+        return new_level
+    if new_level < 0 and new_level < prev_level:
+        return new_level
+    return None
 
 
 def newly_entered_zone(prev_level: int | None, new_level: int | None) -> int | None:

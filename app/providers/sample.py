@@ -40,7 +40,23 @@ SCRIPTS: dict[str, list[tuple[int, float]]] = {
     "BRK.B": [(0, 460), (220, 500), (251, 470), (311, 480)],
     # -31% → -26%로 회복해 구간 이탈 → 다시 -32%로 재진입
     "TSM": [(0, 170), (110, 240), (251, 166), (268, 178), (295, 163), (311, 165)],
+    # Top 10 밖 보유 종목: 평단 대비 +26% → +9%로 내려옴 → 다시 +23%
+    "PLTR": [(0, 40), (200, 95), (251, 88), (280, 76), (311, 86)],
 }
+
+# 연습용 보유 종목 (평단은 달러). 실제 계좌가 아니다.
+HOLDINGS = [
+    # 평단 $160 → -16%에서 시작, -22%까지 빠지며 손실 -20% 알림
+    {"symbol": "NVDA", "name": "엔비디아", "qty": 20, "avg_price": 160.0},
+    # 평단 $440 → +14% (수익 +10% 구간)
+    {"symbol": "MSFT", "name": "마이크로소프트", "qty": 10, "avg_price": 440.0},
+    # 평단 $280 → +21%에서 +30%까지 올라감
+    {"symbol": "AVGO", "name": "브로드컴", "qty": 15, "avg_price": 280.0},
+    # Top 10 밖 종목도 보유 중이면 계속 알림
+    {"symbol": "PLTR", "name": "팔란티어", "qty": 50, "avg_price": 70.0},
+]
+
+FX_RATE = 1400.0  # 연습용 고정 환율
 
 # 이상값 필터 확인용: 이 날은 가격이 잘못 들어온 것처럼 만든다
 BAD_DATA_DAYS = {"TSLA": 262}
@@ -94,6 +110,12 @@ class SampleProvider(PriceProvider):
     def daily_bars(self, symbol: str) -> list[Bar]:
         end = HISTORY_DAYS + self.offset
         return _series(symbol, self._dates)[:end]
+
+    def holdings(self) -> list[dict]:
+        return [dict(h) for h in HOLDINGS]
+
+    def fx_rate(self) -> float:
+        return FX_RATE
 
     @property
     def can_advance(self) -> bool:

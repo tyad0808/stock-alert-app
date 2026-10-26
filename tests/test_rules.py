@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.alerts import held_level, is_outlier, newly_entered_zone
-from app.rules import Bar, drawdown_pct, high_52w, tier, zone_level, zone_price
+from app.alerts import held_level, held_pl_level, is_outlier, newly_entered_pl, newly_entered_zone
+from app.rules import Bar, drawdown_pct, high_52w, pl_level, return_pct, split_plan, tier, zone_level, zone_price
 
 
 @pytest.mark.parametrize("dd, level", [
@@ -81,3 +81,60 @@ def test_outlier():
     assert is_outlier(250, 100)      # 하루 +150%
     assert is_outlier(0, 100)
     assert not is_outlier(70, 100)   # 하루 -30%는 실제로 있을 수 있음
+
+
+# ---------- 내 종목: 수익 +10%마다, 손실 -20%마다 ----------
+
+def test_return_pct():
+    assert return_pct(115, 100) == pytest.approx(15)
+
+
+@pytest.mark.parametrize("ret, level", [
+    (0, None), (9.99, None), (10, 10), (19.9, 10), (27, 20), (105, 100),
+    (-10, None), (-19.99, None), (-20, -20), (-39.9, -20), (-45, -40),
+])
+def test_pl_level(ret, level):
+    assert pl_level(ret) == level
+
+
+@pytest.mark.parametrize("prev, ret, held", [
+    (None, 15, 10),
+    (10, 21, 20),       # 수익 더 커짐
+    (20, 18.5, 20),     # +20에서 1.5%p 내려옴 → 아직 20
+    (20, 17.9, 10),     # 2%p 이상 내려옴 → 10
+    (10, 5, None),      # 수익 구간 벗어남
+    (-20, -18.5, -20),  # -20에서 1.5%p 올라옴 → 아직 -20
+    (-20, -17.9, None), # 2%p 이상 올라옴 → 벗어남
+    (-20, -41, -40),    # 손실 더 깊어짐
+    (20, -25, -20),     # 수익에서 손실로 급변
+])
+def test_held_pl_level(prev, ret, held):
+    assert held_pl_level(prev, ret) == held
+
+
+@pytest.mark.parametrize("prev, new, entered", [
+    (None, 10, 10), (10, 20, 20), (20, 10, None), (20, 20, None),
+    (None, -20, -20), (-20, -40, -40), (-40, -20, None),
+    (10, -20, -20), (-20, 10, 10), (None, None, None),
+])
+def test_newly_entered_pl(prev, new, entered):
+    assert newly_entered_pl(prev, new) == entered
+
+
+def test_split_plan_parts():
+    p = split_plan(10_000_000, 0, 140 * 1400)
+    assert [x["amount"] for x in p["parts"]] == [3_000_000, 3_000_000, 4_000_000]
+    assert p["parts"][0]["shares"] == pytest.approx(15.3, abs=0.1)  # 기획서 예시: 약 15주
+    assert p["next"]["n"] == 1 and p["remaining"] == 10_000_000
+
+
+@pytest.mark.parametrize("invested, done", [
+    (0, [False, False, False]),
+    (2_900_000, [True, False, False]),   # 1차 금액의 95% 이상 → 1차 완료
+    (5_700_000, [True, False, False]),   # 2차 누적 600만에 5,850,000 미만
+    (5_900_000, [True, True, False]),
+    (10_000_000, [True, True, True]),
+])
+def test_split_plan_progress(invested, done):
+    p = split_plan(10_000_000, invested, 200_000)
+    assert [x["done"] for x in p["parts"]] == done
