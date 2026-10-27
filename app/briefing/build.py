@@ -12,7 +12,7 @@ from ..checker import holding_quote, quote, split_for
 from ..db import DB, KST, now_kst
 from ..providers import get_provider
 from . import sources
-from .summarize import SummaryError, summarize
+from .summarize import SummaryError, summarize, translate_headlines
 
 PL_KINDS = {"profit", "loss"}
 TIER_KINDS = {"buy", "review"}
@@ -74,18 +74,22 @@ def _issues(quotes, since_utc: datetime, us_since: date) -> dict:
         except sources.SourceError as e:
             errors.append(f"공시: {e}")
             files[q["symbol"]] = []
-    try:
-        summary = summarize(news, {q["symbol"]: q["name"] for q in quotes})
-    except SummaryError as e:
-        errors.append(f"뉴스 요약: {e}")
-        summary = {}
+    summary, mode = {}, "translate"
+    if config.ANTHROPIC_API_KEY:
+        try:
+            summary = summarize(news, {q["symbol"]: q["name"] for q in quotes})
+            mode = "claude"
+        except SummaryError as e:
+            errors.append(f"뉴스 요약: {e} (자동 번역으로 대신 보여줍니다)")
+    if mode != "claude":
+        summary = translate_headlines(news, sources.translate_ko)
     stocks = []
     for q in quotes:
         items = [{"text": f["title"], "link": f["link"], "kind": "filing"} for f in files[q["symbol"]]]
         items += [{**s, "kind": "news"} for s in summary.get(q["symbol"], [])]
         stocks.append({"symbol": q["symbol"], "name": q["name"], "change_pct": q["change_pct"],
                        "drawdown": q["drawdown"], "items": items})
-    result = {"stocks": stocks, "summary_on": bool(config.ANTHROPIC_API_KEY)}
+    result = {"stocks": stocks, "mode": mode}
     if errors:
         result["warnings"] = sorted(set(errors))[:5]
     return result

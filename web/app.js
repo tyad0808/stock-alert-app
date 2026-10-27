@@ -194,10 +194,11 @@ function briefIssues(is) {
         <span class="num">전일 <b class="${updown(x.change_pct)}">${pct(x.change_pct, 2)}</b> · 1년 고점 대비 ${pct(x.drawdown)}</span></div>
       ${x.items.length ? `<ul class="brief-list">${x.items.map((it) =>
         `<li>${it.kind === "filing" ? `<span class="tag drop">공시</span> ` : ""}${esc(it.text)}
-          <a class="src" href="${esc(it.link)}" target="_blank" rel="noopener">원문</a></li>`).join("")}</ul>`
+          <a class="src" href="${esc(it.link)}" target="_blank" rel="noopener">원문</a>
+          ${it.translated ? `<div class="orig">${esc(it.original)}</div>` : ""}</li>`).join("")}</ul>`
         : `<p class="muted">특이사항 없음</p>`}
     </div>`).join("")}
-    ${is.summary_on ? "" : `<p class="muted" style="margin-top:8px">뉴스 요약은 Claude 연결 후 표시됩니다. 지금은 공시만 보여줍니다.</p>`}
+    ${is.mode === "translate" ? `<p class="muted" style="margin-top:8px">뉴스는 영어 제목을 무료 자동 번역했습니다. 의견·전망 기사는 뺐습니다.</p>` : ""}
     ${(is.warnings || []).map((w) => `<p class="muted">⚠ ${esc(w)}</p>`).join("")}`;
 }
 

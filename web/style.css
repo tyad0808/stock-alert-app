@@ -351,3 +351,4 @@ table.split tr.next td { font-weight: 800; }
 .issue .brief-list li { font-size: 14px; }
 .btn.ghost { background: transparent; color: var(--text-2); border: 1px solid var(--line); }
 #brief-now { width: auto; padding: 12px 20px; }
+.brief-list .orig { color: var(--text-3); font-size: 12px; margin-top: 2px; }

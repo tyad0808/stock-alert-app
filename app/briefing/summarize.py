@@ -62,8 +62,35 @@ class SummaryError(RuntimeError):
     pass
 
 
+# 영어 제목 중 의견·전망·추천 기사 (Claude 없이 번역만 할 때 미리 거른다)
+OPINION_EN = re.compile(
+    r"\?|\b(should|buy|sell|price target|target price|upgrades?|downgrades?|outperform|underperform|"
+    r"overweight|underweight|bull(ish)?|bear(ish)?|forecast|predict\w*|prediction|could|might|may|would|"
+    r"top \d+|best|worst|undervalued|overvalued|cheap|expensive|opportunit\w*|analysts?|rating|"
+    r"soar\w*|plunge\w*|crash\w*|rall(y|ies)|why|here's|millionaire|motley)\b",
+    re.IGNORECASE,
+)
+
+
 def is_opinion(text: str) -> bool:
     return bool(OPINION.search(text))
+
+
+def translate_headlines(news_by_symbol: dict[str, list[dict]], translate) -> dict[str, list[dict]]:
+    """Claude 키가 없을 때: 사실 기사로 보이는 영어 제목만 골라 무료 자동 번역. 종목당 3개까지."""
+    result: dict[str, list[dict]] = {}
+    for symbol, items in news_by_symbol.items():
+        for it in items:
+            if len(result.get(symbol, [])) >= MAX_ITEMS:
+                break
+            if OPINION_EN.search(it["title"]):
+                continue
+            ko = translate(it["title"])
+            if ko and is_opinion(ko):
+                continue
+            result.setdefault(symbol, []).append(
+                {"text": ko or it["title"], "original": it["title"], "link": it["link"], "translated": bool(ko)})
+    return result
 
 
 def _call_claude(prompt: str) -> str:

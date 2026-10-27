@@ -3,9 +3,11 @@
 모두 키 없이 쓰는 공개 자료다. 여기서 모은 것은 브리핑 3·4면에만 쓰고, 알림 판단에는 절대 쓰지 않는다.
 """
 
+import html
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
@@ -141,3 +143,18 @@ def earnings_week(symbols: set[str], today: date) -> list[dict]:
                 result.append({"symbol": sym, "name": r.get("name", ""), "date": d.isoformat(),
                                "time": TIME_LABEL.get(r.get("time", ""), "")})
     return result
+
+
+# ---- 무료 자동 번역 (MyMemory, 키 없이 하루 5,000자) ----
+
+def translate_ko(text: str) -> str | None:
+    """영어 한 줄을 한국어로. 실패하거나 하루 한도를 넘으면 None (그때는 영어 그대로 보여준다)."""
+    q = urllib.parse.urlencode({"q": text[:400], "langpair": "en|ko"})
+    try:
+        data = json.loads(_get(f"https://api.mymemory.translated.net/get?{q}"))
+    except (SourceError, ValueError):
+        return None
+    out = str((data.get("responseData") or {}).get("translatedText") or "").strip()
+    if data.get("responseStatus") not in (200, "200") or not out or "MYMEMORY" in out.upper():
+        return None
+    return html.unescape(out)

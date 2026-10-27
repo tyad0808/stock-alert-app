@@ -29,6 +29,7 @@ def fake_sources(monkeypatch):
     monkeypatch.setattr(sources, "filings", lambda symbol, since: [
         {"form": "8-K", "label": "주요 사항 보고(8-K)", "title": "주요 사항 보고(8-K) · 실적 발표",
          "date": "2026-10-26", "link": "https://www.sec.gov/x"}] if symbol == "MSFT" else [])
+    monkeypatch.setattr(sources, "translate_ko", lambda text: "엔비디아 분기 실적 발표" if "results" in text else None)
     monkeypatch.setattr(sources, "earnings_week", lambda symbols, today: [
         {"symbol": "AAPL", "name": "Apple Inc.", "date": "2026-10-29", "time": "장 마감 후"}])
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
@@ -59,6 +60,25 @@ def test_summarize_keeps_only_facts_with_own_links(monkeypatch):
     assert "1. Nvidia posts record revenue" in prompts[0]
 
 
+def test_translate_skips_opinion_headlines():
+    news = {"NVDA": [
+        {"title": "Is Nvidia stock a buy now?", "link": "https://1"},
+        {"title": "Analysts raise Nvidia price target", "link": "https://2"},
+        {"title": "3 Best AI Stocks to Own", "link": "https://3"},
+        {"title": "Nvidia announces new data center chip", "link": "https://4"},
+        {"title": "Nvidia shares close lower", "link": "https://5"},
+    ]}
+    result = summ.translate_headlines(news, lambda t: None)  # 번역 실패 → 영어 그대로
+    assert [x["link"] for x in result["NVDA"]] == ["https://4", "https://5"]
+    assert result["NVDA"][0]["text"] == "Nvidia announces new data center chip"
+    assert result["NVDA"][0]["translated"] is False
+
+
+def test_translated_opinion_is_dropped():
+    news = {"NVDA": [{"title": "Nvidia expands supply deal", "link": "https://1"}]}
+    assert summ.translate_headlines(news, lambda t: "엔비디아, 주가가 오를 것으로 보인다") == {}
+
+
 def test_summarize_without_key_returns_nothing():
     assert summ.summarize({"NVDA": [{"title": "t", "link": "https://a"}]}, {}, call=lambda p: 1 / 0) == {}
 
@@ -76,8 +96,10 @@ def test_build_weekday_has_all_pages(db):
     issues = {s["symbol"]: s for s in b["issues"]["stocks"]}
     assert len(issues) == 10
     assert issues["MSFT"]["items"][0]["kind"] == "filing"
-    assert issues["NVDA"]["items"] == []  # Claude 키가 없으면 뉴스 요약 없음
-    assert b["issues"]["summary_on"] is False
+    # Claude 키가 없으면 영어 제목을 무료 자동 번역 (원문 제목도 함께)
+    assert issues["NVDA"]["items"] == [{"text": "엔비디아 분기 실적 발표", "original": "NVDA reports quarterly results",
+                                        "link": "https://news.example/NVDA", "translated": True, "kind": "news"}]
+    assert b["issues"]["mode"] == "translate"
     assert b["schedule"]["earnings"][0]["name"] == "애플"
 
 

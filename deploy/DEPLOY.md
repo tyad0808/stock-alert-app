@@ -137,8 +137,8 @@ bash /opt/stock-alert/app/deploy/kiwoom.sh
 
 새 코드를 받으면(`update.sh`) 매일 **08:50** 브리핑이 자동으로 만들어집니다. 폰 앱 **[브리핑]** 탭에서 봅니다.
 
-- Claude 키가 없어도 계좌·매수권장/검토·공시·실적 일정은 나옵니다.
-- 뉴스 요약까지 보려면 Claude 키를 넣습니다.
+- Claude 키가 없어도 계좌·매수권장/검토·공시·실적 일정과, 영어 뉴스 제목의 **무료 자동 번역**이 나옵니다.
+- 한국어 요약(같은 사건 합치기, 더 꼼꼼한 의견 거르기)을 원하면 Claude 키를 넣습니다 (유료, 선택).
   ```bash
   bash /opt/stock-alert/app/deploy/claude.sh
   ```
