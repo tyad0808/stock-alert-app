@@ -321,14 +321,23 @@ class KiwoomProvider(PriceProvider):
         last_error = None
         for i in order:
             try:
-                data, _ = self._call("ust21070", self.BALANCE_BODIES[i])
+                data, next_key = self._call("ust21070", self.BALANCE_BODIES[i])
             except KiwoomError as e:
                 last_error = e
                 continue
             if self.db is not None and saved != str(i):
                 self.db.set_meta("kiwoom_balance_body", str(i))
             _cache["balance_body"] = (0, i)
-            return data.get("result_list") or []
+            rows = self._balance_pages(self.BALANCE_BODIES[i], data, next_key)
+            # 거래소를 비워 두면 한 거래소(나스닥) 종목만 오는 경우가 있어, 거래소별로도 받아 합친다
+            for exchange in BALANCE_EXCHANGES:
+                try:
+                    body = {"stex_tp": exchange, "stk_cd": ""}
+                    first, nxt = self._call("ust21070", body)
+                    rows += self._balance_pages(body, first, nxt)
+                except KiwoomError:
+                    continue
+            return _unique_rows(rows)
         # 전체 조회가 안 되면 감시 목록 종목만 하나씩 확인한다 (Top 10 밖 종목은 빠질 수 있음)
         rows = []
         from .. import universe
@@ -342,6 +351,16 @@ class KiwoomProvider(PriceProvider):
         if not rows and last_error:
             raise last_error
         _cache["balance_body"] = (0, "종목별")
+        return rows
+
+    def _balance_pages(self, body: dict, data: dict, next_key: str) -> list[dict]:
+        """잔고 첫 페이지 + 다음 페이지들 (보유 종목이 많을 때)."""
+        rows = list(data.get("result_list") or [])
+        for _ in range(5):
+            if not next_key:
+                break
+            data, next_key = self._call("ust21070", body, next_key)
+            rows += data.get("result_list") or []
         return rows
 
     def holdings(self) -> list[dict]:
@@ -372,6 +391,37 @@ class KiwoomProvider(PriceProvider):
                     return rate
             return None
         return _cached("fx", FX_TTL, load)
+
+
+BALANCE_EXCHANGES = ("ND", "NY", "NA")
+
+
+def _unique_rows(rows: list[dict]) -> list[dict]:
+    seen, out = set(), []
+    for r in rows:
+        key = str(r.get("stk_cd", "")).strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+def _diagnose_balance() -> None:
+    """잔고 조회를 요청 방식·거래소별로 나눠 보여준다 (빠진 종목 찾기용). 키는 찍지 않는다."""
+    p = KiwoomProvider()
+    bodies = [*KiwoomProvider.BALANCE_BODIES, *({"stex_tp": x, "stk_cd": ""} for x in BALANCE_EXCHANGES)]
+    for body in bodies:
+        try:
+            data, nxt = p._call("ust21070", body)
+        except KiwoomError as e:
+            print(f"✖ {body}: {e}")
+            continue
+        rows = data.get("result_list") or []
+        print(f"✔ {body}: {len(rows)}종목{' (다음 페이지 있음)' if nxt else ''}")
+        for r in rows:
+            qty = {k: v for k, v in r.items() if "qty" in k or k in ("crnc_code", "stex_tp", "stex_nm")}
+            print(f"    {r.get('stk_cd')} {qty}")
 
 
 def _diagnose() -> None:
@@ -410,4 +460,6 @@ def _diagnose() -> None:
 
 
 if __name__ == "__main__":
-    _diagnose()
+    import sys
+
+    _diagnose_balance() if "--balance" in sys.argv else _diagnose()

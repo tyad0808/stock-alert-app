@@ -159,6 +159,7 @@ bash /opt/stock-alert/app/deploy/kiwoom.sh
 | 앱 상태 보기 | `systemctl status stock-alert --no-pager` |
 | 최근 기록 보기 | `journalctl -u stock-alert -n 30 --no-pager` |
 | 키움 연결 점검만 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.providers.kiwoom` |
+| 보유 종목 조회 자세히 (빠진 종목 찾기) | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.providers.kiwoom --balance` |
 | 시험 폰 알림 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.push --test` |
 | 브리핑 지금 다시 만들기 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.briefing --force` |
 | 시세 확인 지금 1번 | `systemctl start stock-alert-check` |
