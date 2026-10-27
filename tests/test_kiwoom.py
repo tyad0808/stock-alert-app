@@ -227,3 +227,25 @@ def test_balance_follows_next_page():
                 {"cont-yn": "Y", "next-key": "P2"})
 
     assert [h["symbol"] for h in FakeProvider(respond).holdings()] == ["ASTS", "SOXL"]
+
+
+def test_invalid_token_8005_gets_new_token(tmp_path):
+    """다른 작업이 새 토큰을 받아 옛 토큰이 끊긴 경우 (영어 'Token' 메시지)."""
+    from app.db import DB
+
+    tokens = iter(["T1", "T2"])
+
+    class P(FakeProvider):
+        def _post(self, path, body, headers):
+            if path == kiwoom.TOKEN_PATH:
+                return {"token": next(tokens), "expires_dt": "20991231235959", "return_code": 0}, {}
+            self.calls.append(headers["authorization"])
+            if headers["authorization"] == "Bearer T1":
+                return {"return_code": 3, "return_msg": "인증에 실패했습니다[8005:Token이 유효하지 않습니다]"}, {}
+            return {"return_code": 0, "spcl_bf_exrt": "1400"}, {}
+
+    p = P(None)
+    p.db = DB(tmp_path / "t.db")
+    assert p.fx_rate() == 1400.0
+    assert p.calls == ["Bearer T1", "Bearer T2"]
+    assert p.db.get_meta("kiwoom_token").startswith("T2|")

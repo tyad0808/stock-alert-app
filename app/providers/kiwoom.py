@@ -163,9 +163,10 @@ class KiwoomProvider(PriceProvider):
         """조회 기능 하나를 부른다. 돌려주는 값: (응답, 다음 페이지 키)."""
         if api_id not in READ_ONLY_APIS:
             raise KiwoomError(f"허용되지 않은 키움 기능입니다: {api_id} (조회 전용)")
+        token = self._token()
         for attempt in range(2):
             headers = {
-                "api-id": api_id, "authorization": f"Bearer {self._token(refresh=attempt > 0)}",
+                "api-id": api_id, "authorization": f"Bearer {token}",
                 "cont-yn": "Y" if next_key else "N", "next-key": next_key,
             }
             data, res_headers = self._post(READ_ONLY_APIS[api_id], body, headers)
@@ -174,8 +175,13 @@ class KiwoomProvider(PriceProvider):
                 lower = {k.lower(): v for k, v in res_headers.items()}
                 more = lower.get("cont-yn") == "Y"
                 return data, (lower.get("next-key", "") if more else "")
-            # 토큰이 만료됐으면 한 번만 새로 받아서 다시 시도
-            if attempt == 0 and "토큰" in str(data.get("return_msg", "")):
+            # 토큰이 만료·무효(8005)면 한 번만 새로 받아서 다시 시도.
+            # 키움은 새 토큰을 받으면 옛 토큰을 끊으므로, 다른 작업(시세 확인·브리핑)이 이미
+            # 새로 받아 둔 토큰이 있으면 그것부터 쓴다
+            if attempt == 0 and _token_error(code, data.get("return_msg")):
+                _cache.pop("token", None)
+                fresh = self._token()
+                token = fresh if fresh != token else self._token(refresh=True)
                 continue
             raise KiwoomError(f"키움 조회 실패 ({api_id}): {data.get('return_msg') or code}")
         raise KiwoomError(f"키움 조회 실패 ({api_id})")
@@ -387,6 +393,10 @@ class KiwoomProvider(PriceProvider):
         return _cached("fx", FX_TTL, load)
 
 
+def _token_error(code, msg) -> bool:
+    return str(code) == "8005" or bool(re.search(r"토큰|token|인증", str(msg or ""), re.I))
+
+
 def _unique_rows(rows: list[dict]) -> list[dict]:
     seen, out = set(), []
     for r in rows:
@@ -398,9 +408,16 @@ def _unique_rows(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _shared_db():
+    """점검도 앱과 같은 토큰을 쓴다 (새 토큰을 받으면 앱이 쓰던 토큰이 끊기기 때문)."""
+    from ..db import DB
+
+    return DB(config.DATA_DIR / "app.db")
+
+
 def _diagnose_balance() -> None:
     """잔고 조회를 요청 방식별로 나눠 보여준다 (빠진 종목 찾기용). 키는 찍지 않는다."""
-    p = KiwoomProvider()
+    p = KiwoomProvider(db=_shared_db())
     for body in KiwoomProvider.BALANCE_BODIES:
         try:
             data, nxt = p._call("ust21070", body)
@@ -427,7 +444,7 @@ def _diagnose() -> None:
             print(f"✖ {title}: {e}")
 
     try:
-        p = KiwoomProvider()
+        p = KiwoomProvider(db=_shared_db())
     except KiwoomError as e:
         print(f"✖ {e}")
         raise SystemExit(1)
