@@ -7,6 +7,7 @@
 """
 
 import json
+import re
 import threading
 import time
 import urllib.error
@@ -30,7 +31,6 @@ READ_ONLY_APIS = {
 
 # 거래소 코드: ND 나스닥, NY 뉴욕, NA 아멕스
 EXCHANGES = ("ND", "NY", "NA")
-EXCHANGE_NAMES = {"나스닥": "ND", "NASDAQ": "ND", "뉴욕": "NY", "NYSE": "NY", "아멕스": "NA", "AMEX": "NA"}
 
 MIN_BARS = config.WINDOW_DAYS + 5  # 1년 고점 계산에 필요한 만큼
 MAX_PAGES = 4
@@ -42,7 +42,7 @@ HOLDINGS_TTL = 60
 FX_TTL = 600
 
 _cache: dict[str, tuple[float, object]] = {}
-_exchange_of: dict[str, str] = {}
+_exchange_of: dict[str, str] = {}  # 종목 → "키움 종목코드|거래소" (찾은 뒤 기억)
 _lock = threading.Lock()
 _last_call = 0.0
 
@@ -178,36 +178,89 @@ class KiwoomProvider(PriceProvider):
             bars[day] = Bar(date=day, close=close, high=max(_num(r.get("high_pric")), close))
         return [bars[d] for d in sorted(bars)]
 
-    def _exchange_candidates(self, symbol: str) -> list[str]:
-        known = _exchange_of.get(symbol) or next(
+    def _listing_candidates(self, symbol: str) -> list[tuple[str, str]]:
+        """(키움 종목코드, 거래소) 시도 순서. 한 번 찾으면 기억해 둔다."""
+        saved = _exchange_of.get(symbol)
+        if saved is None and self.db is not None:
+            saved = self.db.get_meta(f"kiwoom_listing:{symbol}")
+        first = [tuple(saved.split("|", 1))] if saved and "|" in saved else []
+        known = next(
             (s.get("exchange") for s in config.load_watchlist() if s["symbol"] == symbol), None)
-        return [known] + [e for e in EXCHANGES if e != known] if known else list(EXCHANGES)
+        exchanges = [known] + [e for e in EXCHANGES if e != known] if known else list(EXCHANGES)
+        # BRK.B 처럼 점이 들어간 종목은 증권사마다 적는 법이 다르다
+        codes = [symbol]
+        if "." in symbol:
+            codes += [symbol.replace(".", c) for c in ("/", " ", "-", "")]
+        rest = [(c, e) for c in codes for e in exchanges]
+        return first + [x for x in rest if x not in first]
 
     def daily_bars(self, symbol: str) -> list[Bar]:
         def load():
-            for exchange in self._exchange_candidates(symbol):
-                bars = self._chart(symbol, exchange)
+            last_error = None
+            for code, exchange in self._listing_candidates(symbol):
+                try:
+                    bars = self._chart(code, exchange)
+                except KiwoomError as e:
+                    last_error = e
+                    continue
                 if len(bars) >= 2:
-                    _exchange_of[symbol] = exchange
+                    found = f"{code}|{exchange}"
+                    if _exchange_of.get(symbol) != found:
+                        _exchange_of[symbol] = found
+                        if self.db is not None:
+                            self.db.set_meta(f"kiwoom_listing:{symbol}", found)
                     return bars
-            raise KiwoomError(f"{symbol} 시세를 찾지 못했습니다 (거래소 코드 확인 필요)")
+            raise KiwoomError(f"{symbol} 시세를 찾지 못했습니다 ({last_error or '종목코드·거래소 확인 필요'})")
         return _cached(f"bars:{symbol}", BARS_TTL, load)
 
     # ---- 계좌 ----
 
+    # 잔고 조회 요청 방식. 문서와 실제가 달라서, 되는 방식을 차례로 시도하고 기억한다
+    BALANCE_BODIES = (
+        {"stex_tp": "", "stk_cd": ""},
+        {},
+        {"stex_tp": "%", "stk_cd": "%"},
+    )
+
+    def _balance_rows(self) -> list[dict]:
+        saved = self.db.get_meta("kiwoom_balance_body") if self.db is not None else None
+        order = list(range(len(self.BALANCE_BODIES)))
+        if saved is not None and saved.isdigit() and int(saved) < len(order):
+            order.remove(int(saved))
+            order.insert(0, int(saved))
+        last_error = None
+        for i in order:
+            try:
+                data, _ = self._call("ust21070", self.BALANCE_BODIES[i])
+            except KiwoomError as e:
+                last_error = e
+                continue
+            if self.db is not None and saved != str(i):
+                self.db.set_meta("kiwoom_balance_body", str(i))
+            _cache["balance_body"] = (0, i)
+            return data.get("result_list") or []
+        # 전체 조회가 안 되면 감시 목록 종목만 하나씩 확인한다 (Top 10 밖 종목은 빠질 수 있음)
+        rows = []
+        for st in config.load_watchlist():
+            try:
+                data, _ = self._call("ust21070", {"stex_tp": st.get("exchange", "ND"), "stk_cd": st["symbol"]})
+            except KiwoomError:
+                continue
+            rows += data.get("result_list") or []
+        if not rows and last_error:
+            raise last_error
+        _cache["balance_body"] = (0, "종목별")
+        return rows
+
     def holdings(self) -> list[dict]:
         def load():
-            data, _ = self._call("ust21070", {"stex_tp": "%", "stk_cd": ""})
             result = []
-            for r in data.get("result_list") or []:
-                symbol = str(r.get("stk_cd", "")).strip()
+            for r in self._balance_rows():
+                # 키움이 BRK/B 처럼 적어도 감시 목록과 같은 BRK.B 로 맞춘다
+                symbol = re.sub(r"[/ ]", ".", str(r.get("stk_cd", "")).strip())
                 qty = _num(r.get("qty"))
-                if not symbol or qty <= 0 or r.get("crnc_code", "USD") != "USD":
+                if not symbol or qty <= 0 or (r.get("crnc_code") or "USD") != "USD":
                     continue
-                exchange = EXCHANGE_NAMES.get(str(r.get("stex_nm", "")).strip().upper()) \
-                    or EXCHANGE_NAMES.get(str(r.get("stex_nm", "")).strip())
-                if exchange:
-                    _exchange_of.setdefault(symbol, exchange)
                 result.append({
                     "symbol": symbol,
                     "name": str(r.get("frgn_stk_nm") or symbol).strip(),
@@ -249,12 +302,13 @@ def _diagnose() -> None:
 
     step("로그인(토큰)", lambda: "성공" if p._token() else "실패")
     step("환율", lambda: f"{p.fx_rate()}원")
-    step("보유 종목", lambda: ", ".join(
+    step("보유 종목", lambda: (", ".join(
         f"{h['symbol']} {h['qty']:g}주 평단 ${h['avg_price']:,.2f}" for h in p.holdings()) or "없음")
+        + f" (요청 방식 {_cache.get('balance_body', (0, '?'))[1]})")
     for st in config.load_watchlist():
         step(f"{st['symbol']} 시세", lambda st=st: (lambda b: (
             f"{len(b)}일치 {b[0].date}~{b[-1].date}, 최근 종가 ${b[-1].close:,.2f}, "
-            f"1년 고점 ${max(x.high for x in b[-config.WINDOW_DAYS:]):,.2f} ({_exchange_of.get(st['symbol'])})"
+            f"1년 고점 ${max(x.high for x in b[-config.WINDOW_DAYS:]):,.2f} ({_exchange_of.get(st['symbol'], '')})"
         ))(p.daily_bars(st["symbol"])))
     print("\n점검 완료: 모두 정상" if ok else "\n점검 완료: ✖ 표시된 항목을 확인하세요")
     raise SystemExit(0 if ok else 1)

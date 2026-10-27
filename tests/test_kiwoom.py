@@ -82,7 +82,60 @@ def test_daily_bars_tries_other_exchange():
 
     p = FakeProvider(respond)
     assert len(p.daily_bars("PLTR")) == 10
-    assert kiwoom._exchange_of["PLTR"] == "NY"
+    assert kiwoom._exchange_of["PLTR"] == "PLTR|NY"
+
+
+def test_dotted_symbol_tries_other_spellings_and_remembers(tmp_path):
+    from app.db import DB
+
+    db = DB(tmp_path / "t.db")
+
+    def respond(api_id, body, headers):
+        if body["stk_cd"] != "BRK/B":
+            return {"return_code": 1903, "return_msg": "종목 정보가 없습니다"}, {}
+        return {"return_code": 0, "result_list": chart_rows(10)}, {}
+
+    p = FakeProvider(respond)
+    p.db = db
+    assert len(p.daily_bars("BRK.B")) == 10
+    assert db.get_meta("kiwoom_listing:BRK.B") == "BRK/B|NY"
+
+    # 다음 실행(새 프로세스)에서는 기억한 코드로 바로 부른다
+    kiwoom._cache.clear()
+    kiwoom._exchange_of.clear()
+    p2 = FakeProvider(respond)
+    p2.db = db
+    p2.daily_bars("BRK.B")
+    assert [c[2]["stk_cd"] for c in p2.calls if c[1] == "usa06012"] == ["BRK/B"]
+
+
+def test_balance_tries_request_styles(tmp_path):
+    from app.db import DB
+
+    db = DB(tmp_path / "t.db")
+
+    def respond(api_id, body, headers):
+        if body != {}:
+            return {"return_code": 1517, "return_msg": "입력 값 형식이 올바르지 않습니다"}, {}
+        return {"return_code": 0, "result_list": [
+            {"stk_cd": "NVDA", "qty": "1", "frgn_stk_book_uv": "100", "crnc_code": "USD"}]}, {}
+
+    p = FakeProvider(respond)
+    p.db = db
+    assert p.holdings()[0]["symbol"] == "NVDA"
+    assert db.get_meta("kiwoom_balance_body") == "1"
+
+
+def test_balance_falls_back_to_each_watchlist_stock():
+    def respond(api_id, body, headers):
+        if body.get("stk_cd") in ("", "%", None):
+            return {"return_code": 1517, "return_msg": "종목 코드값이 없습니다"}, {}
+        rows = [{"stk_cd": "MSFT", "qty": "2", "frgn_stk_book_uv": "400", "crnc_code": "USD"}] \
+            if body["stk_cd"] == "MSFT" else []
+        return {"return_code": 0, "result_list": rows}, {}
+
+    p = FakeProvider(respond)
+    assert [h["symbol"] for h in p.holdings()] == ["MSFT"]
 
 
 def test_holdings_and_fx():
@@ -91,13 +144,16 @@ def test_holdings_and_fx():
             return {"return_code": 0, "result_list": [
                 {"stk_cd": "NVDA", "frgn_stk_nm": "엔비디아", "qty": "20", "frgn_stk_book_uv": "160.1234",
                  "crnc_code": "USD", "stex_nm": "NASDAQ"},
+                {"stk_cd": "BRK/B", "frgn_stk_nm": "버크셔", "qty": "3", "frgn_stk_book_uv": "450", "crnc_code": "USD"},
                 {"stk_cd": "OLD", "frgn_stk_nm": "판 종목", "qty": "0", "frgn_stk_book_uv": "10", "crnc_code": "USD"},
             ]}, {}
         return {"return_code": 0, "spcl_bf_exrt": "1,385.50", "aplc_exrt": "1390"}, {}
 
     p = FakeProvider(respond)
-    assert p.holdings() == [{"symbol": "NVDA", "name": "엔비디아", "qty": 20.0, "avg_price": 160.1234}]
-    assert kiwoom._exchange_of["NVDA"] == "ND"
+    assert p.holdings() == [
+        {"symbol": "NVDA", "name": "엔비디아", "qty": 20.0, "avg_price": 160.1234},
+        {"symbol": "BRK.B", "name": "버크셔", "qty": 3.0, "avg_price": 450.0},
+    ]
     assert p.fx_rate() == 1385.5
 
 
