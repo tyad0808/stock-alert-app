@@ -106,7 +106,30 @@ bash /opt/stock-alert/app/deploy/setup.sh alert.broadstore.co.kr
 
 처음 접속 때 "안전하지 않음"이 잠깐 보이면 1~2분 뒤 새로고침 (인증서 발급 중).
 
-지금은 **연습용 데이터**로 움직입니다. 키움 연결은 다음 단계에서 안내합니다.
+여기까지는 **연습용 데이터**로 움직입니다.
+
+---
+
+## 7. 키움 연결 (서버에서)
+
+준비물: 키움에서 받은 **앱 키·시크릿 키 파일** (5번의 서버 IP 등록도 끝나 있어야 합니다)
+
+먼저 새 코드를 받습니다.
+```bash
+bash /opt/stock-alert/app/deploy/update.sh
+```
+그다음 키움 연결을 실행합니다.
+```bash
+bash /opt/stock-alert/app/deploy/kiwoom.sh
+```
+
+1. `앱 키(App Key):` → 키 파일을 열어 복사 → 검은 창에서 마우스 오른쪽 버튼(붙여넣기) → Enter (화면에 안 보이는 게 정상)
+2. `시크릿 키(Secret Key):` → 같은 방법
+3. 점검 결과가 `✔` 로 쭉 나오고 `모두 정상` 이면, `실제 데이터로 바꿀까요?` 에 `y`
+4. `키움 연결 완료` 가 나오면 폰에서 앱을 새로고침
+
+> ⚠️ 키는 **채팅창에 절대 붙여넣지 마세요.** 이 스크립트만 서버 `.env` 에 저장합니다.
+> `✖` 가 나오면 그 화면을 캡처해서 보내주세요. 이때는 연습용 데이터 그대로 유지됩니다.
 
 ---
 
@@ -117,5 +140,6 @@ bash /opt/stock-alert/app/deploy/setup.sh alert.broadstore.co.kr
 | 새 코드로 업데이트 | `bash /opt/stock-alert/app/deploy/update.sh` |
 | 앱 상태 보기 | `systemctl status stock-alert --no-pager` |
 | 최근 기록 보기 | `journalctl -u stock-alert -n 30 --no-pager` |
+| 키움 연결 점검만 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.providers.kiwoom` |
 | 시세 확인 지금 1번 | `systemctl start stock-alert-check` |
 | 백업 지금 1번 | `systemctl start stock-alert-backup` |

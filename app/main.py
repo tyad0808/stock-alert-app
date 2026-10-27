@@ -14,6 +14,7 @@ from . import config
 from .checker import holding_quote, quote, run_check, split_for
 from .db import DB, now_kst
 from .providers import get_provider
+from .providers.kiwoom import KiwoomError
 from .rules import tier, zone_price
 
 db = DB(config.DATA_DIR / "app.db")
@@ -37,7 +38,11 @@ def _logged_in(request: Request) -> bool:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     if db.get_meta("last_check") is None:
-        run_check(db)
+        try:
+            run_check(db)
+        except KiwoomError as e:
+            # 키움이 잠깐 안 돼도 앱은 켜져 있어야 한다. 15분마다 도는 시세 확인이 다시 시도한다
+            print(f"첫 시세 확인 실패: {e}")
     yield
 
 
@@ -50,6 +55,12 @@ async def require_login(request: Request, call_next):
     if path.startswith("/api/") and path not in OPEN_PATHS and not _logged_in(request):
         return JSONResponse({"detail": "로그인이 필요합니다"}, status_code=401)
     return await call_next(request)
+
+
+@app.exception_handler(KiwoomError)
+async def kiwoom_error(_request: Request, exc: KiwoomError):
+    return JSONResponse({"detail": f"키움 시세를 가져오지 못했습니다. 잠시 뒤 다시 열어 주세요. ({exc})"},
+                        status_code=503)
 
 
 class LoginBody(BaseModel):

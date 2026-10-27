@@ -9,6 +9,8 @@ def get_provider(db) -> PriceProvider:
         from .sample import SampleProvider
 
         return SampleProvider(offset=int(db.get_meta("practice_offset", "0")))
-    raise ValueError(
-        f"알 수 없는 시세 공급원: {config.DATA_SOURCE} (키움 연결은 2단계에서 추가 예정)"
-    )
+    if config.DATA_SOURCE == "kiwoom":
+        from .kiwoom import KiwoomProvider
+
+        return KiwoomProvider(db)
+    raise ValueError(f"알 수 없는 시세 공급원: {config.DATA_SOURCE} (sample 또는 kiwoom)")

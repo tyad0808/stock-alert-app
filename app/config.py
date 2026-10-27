@@ -53,6 +53,10 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "data"))
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 APP_SECRET = os.environ.get("APP_SECRET", "")
 
+# 키움 REST API (조회 전용). DATA_SOURCE=kiwoom 일 때 쓴다
+KIWOOM_APP_KEY = os.environ.get("KIWOOM_APP_KEY", "")
+KIWOOM_APP_SECRET = os.environ.get("KIWOOM_APP_SECRET", "")
+
 
 def load_watchlist() -> list[dict]:
     data = json.loads((ROOT / "config" / "watchlist.json").read_text(encoding="utf-8"))

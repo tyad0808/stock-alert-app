@@ -1,16 +1,16 @@
 {
-  "note": "미국 시가총액 상위 10개 종목. 지금은 예시 목록이며, 매월 1회 실제 순위로 갱신한다.",
+  "note": "미국 시가총액 상위 10개 종목. 지금은 예시 목록이며, 매월 1회 실제 순위로 갱신한다. exchange: ND 나스닥, NY 뉴욕",
   "updated": "2026-10-26",
   "stocks": [
-    {"symbol": "NVDA", "name": "엔비디아"},
-    {"symbol": "MSFT", "name": "마이크로소프트"},
-    {"symbol": "AAPL", "name": "애플"},
-    {"symbol": "GOOGL", "name": "알파벳"},
-    {"symbol": "AMZN", "name": "아마존"},
-    {"symbol": "META", "name": "메타"},
-    {"symbol": "AVGO", "name": "브로드컴"},
-    {"symbol": "TSLA", "name": "테슬라"},
-    {"symbol": "BRK.B", "name": "버크셔 해서웨이"},
-    {"symbol": "TSM", "name": "TSMC"}
+    {"symbol": "NVDA", "name": "엔비디아", "exchange": "ND"},
+    {"symbol": "MSFT", "name": "마이크로소프트", "exchange": "ND"},
+    {"symbol": "AAPL", "name": "애플", "exchange": "ND"},
+    {"symbol": "GOOGL", "name": "알파벳", "exchange": "ND"},
+    {"symbol": "AMZN", "name": "아마존", "exchange": "ND"},
+    {"symbol": "META", "name": "메타", "exchange": "ND"},
+    {"symbol": "AVGO", "name": "브로드컴", "exchange": "ND"},
+    {"symbol": "TSLA", "name": "테슬라", "exchange": "ND"},
+    {"symbol": "BRK.B", "name": "버크셔 해서웨이", "exchange": "NY"},
+    {"symbol": "TSM", "name": "TSMC", "exchange": "NY"}
   ]
 }
