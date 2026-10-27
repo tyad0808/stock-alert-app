@@ -204,27 +204,26 @@ def test_rankings_normalize_codes():
     assert kiwoom._exchange_of["BRK.B"] == "BRKb|NY"
 
 
-def test_balance_merges_each_exchange():
-    """거래소를 비워 두면 나스닥 종목만 오는 경우: 거래소별로 받아 합친다 (SOXL 은 NYSE Arca)."""
-    def respond(api_id, body, headers):
-        by_exchange = {
-            "": [{"stk_cd": "ASTS", "qty": "5", "frgn_stk_book_uv": "30", "crnc_code": "USD"}],
-            "ND": [{"stk_cd": "ASTS", "qty": "5", "frgn_stk_book_uv": "30", "crnc_code": "USD"}],
-            "NA": [{"stk_cd": "SOXL", "qty": "10", "frgn_stk_book_uv": "40", "crnc_code": "USD"}],
-            "NY": [],
-        }
-        return {"return_code": 0, "result_list": by_exchange[body["stex_tp"]]}, {}
 
-    assert [h["symbol"] for h in FakeProvider(respond).holdings()] == ["ASTS", "SOXL"]
+def test_unsettled_purchase_uses_possible_qty():
+    """어제 산 종목: 결제 전이라 qty 는 0, poss_qty 에 수량이 있다 (영웅문에는 보임)."""
+    def respond(api_id, body, headers):
+        return {"return_code": 0, "result_list": [
+            {"stk_cd": "SOXL", "qty": "000000000000", "poss_qty": "000000000006", "frgn_stk_book_uv": "40.5",
+             "crnc_code": "USD"},
+            {"stk_cd": "ZERO", "qty": "0", "poss_qty": "3", "frgn_stk_book_uv": "0", "crnc_code": "USD"},
+        ]}, {}
+
+    assert FakeProvider(respond).holdings() == [{"symbol": "SOXL", "name": "SOXL", "qty": 6.0, "avg_price": 40.5}]
 
 
 def test_balance_follows_next_page():
     def respond(api_id, body, headers):
-        if body.get("stex_tp"):
-            return {"return_code": 0, "result_list": []}, {}
         if headers["next-key"] == "P2":
-            return {"return_code": 0, "result_list": [{"stk_cd": "SOXL", "qty": "1", "crnc_code": "USD"}]}, {}
-        return ({"return_code": 0, "result_list": [{"stk_cd": "ASTS", "qty": "1", "crnc_code": "USD"}]},
+            return {"return_code": 0, "result_list": [
+                {"stk_cd": "SOXL", "qty": "1", "frgn_stk_book_uv": "1", "crnc_code": "USD"}]}, {}
+        return ({"return_code": 0, "result_list": [
+            {"stk_cd": "ASTS", "qty": "1", "frgn_stk_book_uv": "1", "crnc_code": "USD"}]},
                 {"cont-yn": "Y", "next-key": "P2"})
 
     assert [h["symbol"] for h in FakeProvider(respond).holdings()] == ["ASTS", "SOXL"]

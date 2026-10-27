@@ -328,16 +328,7 @@ class KiwoomProvider(PriceProvider):
             if self.db is not None and saved != str(i):
                 self.db.set_meta("kiwoom_balance_body", str(i))
             _cache["balance_body"] = (0, i)
-            rows = self._balance_pages(self.BALANCE_BODIES[i], data, next_key)
-            # 거래소를 비워 두면 한 거래소(나스닥) 종목만 오는 경우가 있어, 거래소별로도 받아 합친다
-            for exchange in BALANCE_EXCHANGES:
-                try:
-                    body = {"stex_tp": exchange, "stk_cd": ""}
-                    first, nxt = self._call("ust21070", body)
-                    rows += self._balance_pages(body, first, nxt)
-                except KiwoomError:
-                    continue
-            return _unique_rows(rows)
+            return _unique_rows(self._balance_pages(self.BALANCE_BODIES[i], data, next_key))
         # 전체 조회가 안 되면 감시 목록 종목만 하나씩 확인한다 (Top 10 밖 종목은 빠질 수 있음)
         rows = []
         from .. import universe
@@ -369,14 +360,17 @@ class KiwoomProvider(PriceProvider):
             for r in self._balance_rows():
                 # 키움이 BRK/B 처럼 적어도 감시 목록과 같은 BRK.B 로 맞춘다
                 symbol = re.sub(r"[/ ]", ".", str(r.get("stk_cd", "")).strip())
-                qty = _num(r.get("qty"))
-                if not symbol or qty <= 0 or (r.get("crnc_code") or "USD") != "USD":
+                # qty 는 결제가 끝난 수량이라 어제 산 종목은 0 으로 온다 (미국 주식은 다음 날 결제).
+                # 영웅문처럼 결제 전 수량까지 보려면 poss_qty(보유·매도 가능 수량)를 함께 본다
+                qty = max(_num(r.get("qty")), _num(r.get("poss_qty")))
+                avg = _num(r.get("frgn_stk_book_uv"))
+                if not symbol or qty <= 0 or avg <= 0 or (r.get("crnc_code") or "USD") != "USD":
                     continue
                 result.append({
                     "symbol": symbol,
                     "name": str(r.get("frgn_stk_nm") or symbol).strip(),
                     "qty": qty,
-                    "avg_price": round(_num(r.get("frgn_stk_book_uv")), 4),
+                    "avg_price": round(avg, 4),
                 })
             return result
         return [dict(h) for h in _cached("holdings", HOLDINGS_TTL, load)]
@@ -393,9 +387,6 @@ class KiwoomProvider(PriceProvider):
         return _cached("fx", FX_TTL, load)
 
 
-BALANCE_EXCHANGES = ("ND", "NY", "NA")
-
-
 def _unique_rows(rows: list[dict]) -> list[dict]:
     seen, out = set(), []
     for r in rows:
@@ -408,10 +399,9 @@ def _unique_rows(rows: list[dict]) -> list[dict]:
 
 
 def _diagnose_balance() -> None:
-    """잔고 조회를 요청 방식·거래소별로 나눠 보여준다 (빠진 종목 찾기용). 키는 찍지 않는다."""
+    """잔고 조회를 요청 방식별로 나눠 보여준다 (빠진 종목 찾기용). 키는 찍지 않는다."""
     p = KiwoomProvider()
-    bodies = [*KiwoomProvider.BALANCE_BODIES, *({"stex_tp": x, "stk_cd": ""} for x in BALANCE_EXCHANGES)]
-    for body in bodies:
+    for body in KiwoomProvider.BALANCE_BODIES:
         try:
             data, nxt = p._call("ust21070", body)
         except KiwoomError as e:
@@ -420,7 +410,7 @@ def _diagnose_balance() -> None:
         rows = data.get("result_list") or []
         print(f"✔ {body}: {len(rows)}종목{' (다음 페이지 있음)' if nxt else ''}")
         for r in rows:
-            qty = {k: v for k, v in r.items() if "qty" in k or k in ("crnc_code", "stex_tp", "stex_nm")}
+            qty = {k: v for k, v in r.items() if "qty" in k or k.endswith("_uv") or k in ("crnc_code", "stex_tp", "stex_nm")}
             print(f"    {r.get('stk_cd')} {qty}")
 
 
