@@ -1,6 +1,6 @@
 """키움 REST API 시세 공급원. 조회 전용이다.
 
-부를 수 있는 키움 기능은 READ_ONLY_APIS 의 세 가지(+로그인 토큰)뿐이다.
+부를 수 있는 키움 기능은 READ_ONLY_APIS 의 네 가지(+로그인 토큰)뿐이다.
 주문·환전 신청 같은 기능은 목록에 없어서, 코드 어디에서 불러도 _call 이 막는다.
 
 서버에서 연결 점검:  python -m app.providers.kiwoom
@@ -27,6 +27,7 @@ READ_ONLY_APIS = {
     "usa06012": "/api/us/chart",     # 미국주식 일 차트
     "ust21070": "/api/us/acnt",      # 미국주식 원장잔고확인 (보유 종목·평단)
     "ust31301": "/api/us/exchange",  # 환율 조회
+    "usa10099": "/api/us/stkinfo",   # 미국주식 종목리스트 (BRK.B 처럼 표기가 다른 종목의 코드 찾기)
 }
 
 # 거래소 코드: ND 나스닥, NY 뉴욕, NA 아멕스
@@ -194,6 +195,21 @@ class KiwoomProvider(PriceProvider):
         rest = [(c, e) for c in codes for e in exchanges]
         return first + [x for x in rest if x not in first]
 
+    def _find_listing(self, symbol: str) -> tuple[str, str] | None:
+        """키움 종목 목록에서 점·빗금 같은 기호를 빼고 같은 코드를 찾는다. 예: BRK.B → BRKB"""
+        want = re.sub(r"[^A-Z0-9]", "", symbol.upper())
+        for exchange in dict.fromkeys(e for _, e in self._listing_candidates(symbol)):
+            next_key = ""
+            for _ in range(30):
+                data, next_key = self._call("usa10099", {"stex_tp": exchange}, next_key)
+                for item in data.get("list") or []:
+                    code = str(item.get("stk_cd", "")).strip()
+                    if re.sub(r"[^A-Z0-9]", "", code.upper()) == want:
+                        return code, exchange
+                if not next_key:
+                    break
+        return None
+
     def daily_bars(self, symbol: str) -> list[Bar]:
         def load():
             last_error = None
@@ -209,6 +225,16 @@ class KiwoomProvider(PriceProvider):
                         _exchange_of[symbol] = found
                         if self.db is not None:
                             self.db.set_meta(f"kiwoom_listing:{symbol}", found)
+                    return bars
+            # 그래도 없으면 키움 종목 목록에서 같은 종목을 찾아 그 코드로 부른다
+            listing = self._find_listing(symbol)
+            if listing:
+                bars = self._chart(*listing)
+                if len(bars) >= 2:
+                    found = "|".join(listing)
+                    _exchange_of[symbol] = found
+                    if self.db is not None:
+                        self.db.set_meta(f"kiwoom_listing:{symbol}", found)
                     return bars
             raise KiwoomError(f"{symbol} 시세를 찾지 못했습니다 ({last_error or '종목코드·거래소 확인 필요'})")
         return _cached(f"bars:{symbol}", BARS_TTL, load)

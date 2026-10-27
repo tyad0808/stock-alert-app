@@ -167,7 +167,7 @@ def test_only_read_only_apis_allowed():
     p = FakeProvider(lambda *_: ({"return_code": 0}, {}))
     with pytest.raises(KiwoomError, match="조회 전용"):
         p._call("ust12345", {})  # 목록에 없는 기능은 무엇이든 막힌다
-    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301"}
+    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301", "usa10099"}
 
 
 def test_no_order_code_in_provider():
@@ -175,3 +175,16 @@ def test_no_order_code_in_provider():
     src = (Path(kiwoom.__file__)).read_text(encoding="utf-8")
     code = "\n".join(line for line in src.splitlines() if not line.strip().startswith("#"))
     assert not re.search(r"/api/us/ordr|/api/dostk/ordr|ord_qty|ord_uv", code)
+
+
+def test_dotted_symbol_found_in_stock_list():
+    def respond(api_id, body, headers):
+        if api_id == "usa10099":
+            return {"return_code": 0, "list": [{"stk_cd": "BRK.A"}, {"stk_cd": "BRK_B"}]}, {}
+        if body["stk_cd"] != "BRK_B":
+            return {"return_code": 1903, "return_msg": "종목 정보가 없습니다"}, {}
+        return {"return_code": 0, "result_list": chart_rows(10)}, {}
+
+    p = FakeProvider(respond)
+    assert len(p.daily_bars("BRK.B")) == 10
+    assert kiwoom._exchange_of["BRK.B"] == "BRK_B|NY"

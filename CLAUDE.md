@@ -32,7 +32,7 @@
   - `rules.py` 원칙 엔진 (1년 고점 대비 하락률, 구간, 단계)
   - `alerts.py` 알림 필터 (경계선 여유, 구간 진입 판단, 이상값)
   - `checker.py` 시세 계산(quote) → 알림 판단 → 기록 (하루 1회 제한)
-  - `providers/` 시세 공급원. `sample.py`(연습용 데이터), `kiwoom.py`(키움 REST, 조회 전용 3개 기능만 허용)
+  - `providers/` 시세 공급원. `sample.py`(연습용 데이터), `kiwoom.py`(키움 REST, 조회 전용 4개 기능만 허용)
 - `deploy/` 서버 설치 (`setup.sh`, `update.sh`, `kiwoom.sh`, `DEPLOY.md`)
 - `web/` 폰에 설치하는 웹앱(PWA). 빌드 과정 없는 순수 HTML·CSS·JS
 - `config/watchlist.json` 감시 종목 목록
