@@ -1,6 +1,6 @@
 """키움 REST API 시세 공급원. 조회 전용이다.
 
-부를 수 있는 키움 기능은 READ_ONLY_APIS 의 네 가지(+로그인 토큰)뿐이다.
+부를 수 있는 키움 기능은 READ_ONLY_APIS 의 조회 기능(+로그인 토큰)뿐이다.
 주문·환전 신청 같은 기능은 목록에 없어서, 코드 어디에서 불러도 _call 이 막는다.
 
 서버에서 연결 점검:  python -m app.providers.kiwoom
@@ -28,10 +28,15 @@ READ_ONLY_APIS = {
     "ust21070": "/api/us/acnt",      # 미국주식 원장잔고확인 (보유 종목·평단)
     "ust31301": "/api/us/exchange",  # 환율 조회
     "usa10099": "/api/us/stkinfo",   # 미국주식 종목리스트 (BRK.B 처럼 표기가 다른 종목의 코드 찾기)
+    "usa20550": "/api/us/rkinfo",    # 미국주식 시가총액 상위 (주식 Top 10 자동 갱신)
+    "usa20551": "/api/us/rkinfo",    # 미국 ETF 시가총액 상위 (ETF Top 10 자동 갱신)
 }
 
 # 거래소 코드: ND 나스닥, NY 뉴욕, NA 아멕스
 EXCHANGES = ("ND", "NY", "NA")
+# 순위 응답의 거래소 표기 → 위 코드 (표기가 여러 가지라 넉넉히)
+RANK_EXCHANGES = {"ND": "ND", "NAS": "ND", "NASDAQ": "ND", "2": "ND", "NY": "NY", "NYS": "NY", "NYSE": "NY", "1": "NY",
+                  "NA": "NA", "AMS": "NA", "AMEX": "NA", "3": "NA"}
 
 MIN_BARS = config.WINDOW_DAYS + 5  # 1년 고점 계산에 필요한 만큼
 MAX_PAGES = 4
@@ -204,8 +209,9 @@ class KiwoomProvider(PriceProvider):
         if saved is None and self.db is not None:
             saved = self.db.get_meta(f"kiwoom_listing:{symbol}")
         first = [tuple(saved.split("|", 1))] if saved and "|" in saved else []
-        known = next(
-            (s.get("exchange") for s in config.load_watchlist() if s["symbol"] == symbol), None)
+        from .. import universe
+
+        known = (universe.find(self.db, symbol) or {}).get("exchange")
         exchanges = [known] + [e for e in EXCHANGES if e != known] if known else list(EXCHANGES)
         # BRK.B 처럼 점이 들어간 종목은 증권사마다 적는 법이 다르다
         codes = [symbol]
@@ -275,6 +281,30 @@ class KiwoomProvider(PriceProvider):
             raise KiwoomError(f"{symbol} 시세를 찾지 못했습니다 ({last_error or '종목코드·거래소 확인 필요'})")
         return _cached(f"bars:{symbol}", BARS_TTL, load)
 
+    # ---- 순위 ----
+
+    def rankings(self, kind: str) -> list[dict]:
+        """시가총액 상위 (kind: stocks / etf). [{symbol, name, exchange}] 순위순."""
+        api_id = "usa20550" if kind == "stocks" else "usa20551"
+        body = {"stex_tp": "0", "trde_qty_tp": "0", "stk_cnd": "0", "pric_cnd": "0", "trde_prica_cnd": "0"}
+        body.update({"inds_cd": "", "stk_tp": "1"} if kind == "stocks" else {"etf_cat1": "", "etf_cat2": ""})
+        data, _ = self._call(api_id, body)
+        rows = sorted(data.get("result_list") or [], key=lambda r: _num(r.get("rank")) or 9999)
+        result = []
+        for r in rows:
+            code = str(r.get("stk_cd", "")).strip()
+            if not code:
+                continue
+            # 키움은 종류주를 BRKb 처럼 적는다 → BRK.B
+            m = re.fullmatch(r"([A-Z]+)([a-z])", code)
+            symbol = f"{m[1]}.{m[2].upper()}" if m else code
+            exchange = RANK_EXCHANGES.get(str(r.get("stex_tp", "")).strip().upper())
+            if exchange:
+                _exchange_of.setdefault(symbol, f"{code}|{exchange}")
+            result.append({"symbol": symbol, "name": str(r.get("stk_nm") or symbol).strip(),
+                           **({"exchange": exchange} if exchange else {})})
+        return result
+
     # ---- 계좌 ----
 
     # 잔고 조회 요청 방식. 문서와 실제가 달라서, 되는 방식을 차례로 시도하고 기억한다
@@ -303,7 +333,9 @@ class KiwoomProvider(PriceProvider):
             return data.get("result_list") or []
         # 전체 조회가 안 되면 감시 목록 종목만 하나씩 확인한다 (Top 10 밖 종목은 빠질 수 있음)
         rows = []
-        for st in config.load_watchlist():
+        from .. import universe
+
+        for st in universe.everything(self.db):
             try:
                 data, _ = self._call("ust21070", {"stex_tp": st.get("exchange", "ND"), "stk_cd": st["symbol"]})
             except KiwoomError:
@@ -367,7 +399,11 @@ def _diagnose() -> None:
     step("보유 종목", lambda: (", ".join(
         f"{h['symbol']} {h['qty']:g}주 평단 ${h['avg_price']:,.2f}" for h in p.holdings()) or "없음")
         + f" (요청 방식 {_cache.get('balance_body', (0, '?'))[1]})")
-    for st in config.load_watchlist():
+    from .. import universe
+
+    step("주식 시가총액 순위", lambda: ", ".join(r["symbol"] for r in p.rankings("stocks")[:12]))
+    step("ETF 시가총액 순위", lambda: ", ".join(r["symbol"] for r in p.rankings("etf")[:12]))
+    for st in universe.everything():
         step(f"{st['symbol']} 시세", lambda st=st: (lambda b: (
             f"{len(b)}일치 {b[0].date}~{b[-1].date}, 최근 종가 ${b[-1].close:,.2f}, "
             f"1년 고점 ${max(x.high for x in b[-config.WINDOW_DAYS:]):,.2f} ({_exchange_of.get(st['symbol'], '')})"

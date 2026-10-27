@@ -72,7 +72,9 @@ def build(db: DB, provider=None, now: datetime | None = None) -> dict:
     today = now.astimezone(KST).date()
     market_day = today.weekday() not in (6, 0)  # 일(6)·월(0) 아침은 전날 미국 장이 없다
 
-    watch = config.load_watchlist()
+    from .. import universe
+
+    watch = universe.stocks(db)
     names = {s["symbol"]: s["name"] for s in watch}
     data = {
         "date": today.isoformat(),

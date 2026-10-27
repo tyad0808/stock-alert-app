@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config
+from . import config, universe
 from .checker import holding_quote, quote, run_check, split_for
 from .db import DB, now_kst
 from .providers import get_provider
@@ -58,7 +58,7 @@ def _keep_warm():
     while True:
         try:
             provider = get_provider(db)
-            symbols = [s["symbol"] for s in config.load_watchlist()]
+            symbols = [s["symbol"] for s in universe.everything(db)]
             symbols += [h["symbol"] for h in provider.holdings() if h["symbol"] not in symbols]
             for symbol in symbols:
                 provider.daily_bars(symbol)
@@ -124,14 +124,23 @@ def status(request: Request):
     }
 
 
+def _board(items: list[dict]) -> list[dict]:
+    provider = get_provider(db)
+    held = {h["symbol"] for h in provider.holdings()}
+    return [{**quote(st, provider.daily_bars(st["symbol"])), "held": st["symbol"] in held,
+             **{k: st[k] for k in ("rank", "extra") if k in st}} for st in items]
+
+
 @app.get("/api/board")
 def board():
     """시세판: Top 10 전체의 현재가와 1년 고점 대비. 알림과 상관없이 열 때마다 새로 계산한다."""
-    provider = get_provider(db)
-    held = {h["symbol"] for h in provider.holdings()}
-    stocks = [{**quote(st, provider.daily_bars(st["symbol"])), "held": st["symbol"] in held}
-              for st in config.load_watchlist()]
-    return {"stocks": stocks, "updated": now_kst()}
+    return {"stocks": _board(universe.stocks(db)), "updated": now_kst(), "note": universe.note(db)}
+
+
+@app.get("/api/etf")
+def etf_board():
+    """ETF 시세판: 규모 Top 10 + 항상 보는 ETF. 알림 기준은 주식과 같다."""
+    return {"stocks": _board(universe.etfs(db)), "updated": now_kst(), "note": universe.note(db)}
 
 
 @app.get("/api/holdings")
@@ -139,7 +148,7 @@ def holdings():
     """내 종목: 평단 대비 수익률과 평가금액. 계좌에서 조회만 한다."""
     provider = get_provider(db)
     fx = provider.fx_rate()
-    top10 = {s["symbol"] for s in config.load_watchlist()}
+    top10 = {s["symbol"] for s in universe.everything(db)}
     rows = [{**holding_quote(h, provider.daily_bars(h["symbol"])), "in_top10": h["symbol"] in top10}
             for h in provider.holdings()]
     value = sum(r["value_usd"] for r in rows)
@@ -162,7 +171,7 @@ def holdings():
 @app.get("/api/stock/{symbol}")
 def stock(symbol: str):
     provider = get_provider(db)
-    top10 = next((s for s in config.load_watchlist() if s["symbol"] == symbol), None)
+    top10 = universe.find(db, symbol)
     held = next((h for h in provider.holdings() if h["symbol"] == symbol), None)
     if top10 is None and held is None:
         raise HTTPException(404, "감시 목록이나 내 종목에 없는 종목입니다")
@@ -203,7 +212,7 @@ def set_split(symbol: str, body: SplitBody):
     """3분할 총 투자금 저장 (0이면 삭제). 주문과는 무관한 메모다."""
     provider = get_provider(db)
     held = next((h for h in provider.holdings() if h["symbol"] == symbol), None)
-    if held is None and not any(s["symbol"] == symbol for s in config.load_watchlist()):
+    if held is None and universe.find(db, symbol) is None:
         raise HTTPException(404, "감시 목록이나 내 종목에 없는 종목입니다")
     db.set_split_total(symbol, body.total_krw)
     bars = provider.daily_bars(symbol)

@@ -29,8 +29,12 @@ def test_board_has_all_ten_in_watchlist_order(client):
     assert all(isinstance(s["drawdown"], float) for s in stocks)
 
 
+STOCKS = {"NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "BRK.B", "TSM"}
+
+
 def test_initial_alerts_by_tier(client):
-    got = {(a["symbol"], a["kind"]) for a in alerts(client) if a["kind"] in ("buy", "review")}
+    got = {(a["symbol"], a["kind"]) for a in alerts(client)
+           if a["kind"] in ("buy", "review") and a["symbol"] in STOCKS}
     assert got == {
         ("META", "buy"),       # -41%
         ("NVDA", "buy"),       # -33%
@@ -56,9 +60,22 @@ def test_practice_run_through(client):
 
 
 def test_reset(client):
+    first = len(alerts(client))
     client.post("/api/practice/advance", json={"days": 10})
+    assert len(alerts(client)) > first
     client.post("/api/practice/reset")
-    assert len(alerts(client)) == 11  # Top 10 하락 8개 + 내 종목 3개
+    assert len(alerts(client)) == first  # 처음 상태로 돌아감
+    stock_alerts = [a for a in alerts(client) if a["symbol"] in STOCKS and a["kind"] in ("buy", "review")]
+    assert len(stock_alerts) == 8
+
+
+def test_etf_board(client):
+    d = client.get("/api/etf").json()
+    syms = [s["symbol"] for s in d["stocks"]]
+    assert syms[:3] == ["VOO", "IVV", "SPY"] and len(syms) == 13
+    assert {"SOXL", "TQQQ", "SOXX"} <= set(syms)
+    assert d["stocks"][0]["rank"] == 1 and d["stocks"][-1]["extra"] is True
+    assert client.get("/api/stock/SOXL").status_code == 200
 
 
 def test_stock_detail(client):

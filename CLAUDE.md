@@ -23,7 +23,7 @@
 | 1단계 | 앱 기본 화면, Top 10 실시간 시세판, 하락 알림 (매수검토 -5~-15%, 매수권장 -20%~) | 완료 (키움 실제 시세로 운영 중) |
 | 2단계 | 키움 조회 연동, 수익 +10%·손실 -20%, 3분할 계산기 | 완료 (2026-10-27 서버에서 키움 연결, 실제 계좌 조회 중) |
 | 3단계 | 뉴스·공시 수집, AI 사실 요약, 매일 9시 브리핑 | 완료 (브리핑 08:50 자동 작성, 09:00 폰 알림 동작 확인 2026-10-27) |
-| 4단계 | ETF Top 10 탭, 알림 이력 정리, 설정 화면 완성 | 대기 |
+| 4단계 | ETF Top 10 탭, 알림 이력 정리, 설정 화면 완성 | ETF 탭 완료 (규모 Top 10 + SOXL·TQQQ·SOXX, 주식·ETF 순위 매일 자동 갱신) — 서버 점검 대기 |
 
 ## 구조
 
@@ -32,12 +32,13 @@
   - `rules.py` 원칙 엔진 (1년 고점 대비 하락률, 구간, 단계)
   - `alerts.py` 알림 필터 (경계선 여유, 구간 진입 판단, 이상값)
   - `checker.py` 시세 계산(quote) → 알림 판단 → 기록 (하루 1회 제한)
+  - `universe.py` 감시 목록 (주식 Top 10·ETF Top 10, 키움 시가총액 순위로 매일 갱신, 실패 시 config 파일)
   - `push.py` 폰 알림 (웹 푸시, 매일 9시 브리핑 도착만)
   - `briefing/` 아침 브리핑 (`sources.py` 뉴스·공시·일정, `summarize.py` Claude 사실 요약·의견 필터, `build.py` Top 10 이슈·이번 주 일정)
-  - `providers/` 시세 공급원. `sample.py`(연습용 데이터), `kiwoom.py`(키움 REST, 조회 전용 4개 기능만 허용)
+  - `providers/` 시세 공급원. `sample.py`(연습용 데이터), `kiwoom.py`(키움 REST, 조회 전용 기능만 허용 (READ_ONLY_APIS))
 - `deploy/` 서버 설치 (`setup.sh`, `update.sh`, `kiwoom.sh`, `claude.sh`, `briefing-timer.sh`, `DEPLOY.md`)
 - `web/` 폰에 설치하는 웹앱(PWA). 빌드 과정 없는 순수 HTML·CSS·JS
-- `config/watchlist.json` 감시 종목 목록
+- `config/watchlist.json`, `config/etf.json` 기본 감시 목록 (순위를 못 받을 때), `etf.json` 의 extra 는 항상 보는 ETF
 - `tests/` 자동 테스트 (`python -m pytest`)
 
 ## 실행

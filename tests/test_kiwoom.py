@@ -167,7 +167,7 @@ def test_only_read_only_apis_allowed():
     p = FakeProvider(lambda *_: ({"return_code": 0}, {}))
     with pytest.raises(KiwoomError, match="조회 전용"):
         p._call("ust12345", {})  # 목록에 없는 기능은 무엇이든 막힌다
-    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301", "usa10099"}
+    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301", "usa10099", "usa20550", "usa20551"}
 
 
 def test_no_order_code_in_provider():
@@ -188,3 +188,17 @@ def test_dotted_symbol_found_in_stock_list():
     p = FakeProvider(respond)
     assert len(p.daily_bars("BRK.B")) == 10
     assert kiwoom._exchange_of["BRK.B"] == "BRK_B|NY"
+
+
+def test_rankings_normalize_codes():
+    def respond(api_id, body, headers):
+        assert api_id == "usa20550"
+        return {"return_code": 0, "result_list": [
+            {"rank": "2", "stk_cd": "MSFT", "stk_nm": "마이크로소프트", "stex_tp": "NAS"},
+            {"rank": "1", "stk_cd": "NVDA", "stk_nm": "엔비디아", "stex_tp": "NAS"},
+            {"rank": "3", "stk_cd": "BRKb", "stk_nm": "버크셔 B", "stex_tp": "NYS"},
+        ]}, {}
+
+    rows = FakeProvider(respond).rankings("stocks")
+    assert [r["symbol"] for r in rows] == ["NVDA", "MSFT", "BRK.B"]
+    assert kiwoom._exchange_of["BRK.B"] == "BRKb|NY"

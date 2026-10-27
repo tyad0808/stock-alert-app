@@ -56,6 +56,7 @@ function stockCard(s) {
   return `<a class="stock ${cls}" href="#/stock/${encodeURIComponent(s.symbol)}">
     <div class="name">${esc(s.name)}<span class="sym">${esc(s.symbol)}</span>
       ${tierTag(s.tier)}${s.new_high ? `<span class="tag newhigh">신고가</span>` : ""}${s.held ? `<span class="tag held">보유</span>` : ""}
+      ${s.extra ? `<span class="tag out">항상 보기</span>` : ""}
       ${s.data_warning ? `<span class="tag warn">데이터 확인 필요</span>` : ""}</div>
     <div class="price num">${usd(s.price)}</div>
     <div class="high num">1년 고점 <b>${usd(s.high)}</b></div>
@@ -64,29 +65,39 @@ function stockCard(s) {
   </a>`;
 }
 
-async function renderHome() {
-  const { stocks, updated } = await api("/board");
-  const sort = store("sort") || "drop";
+async function renderHome() { await renderBoard("home"); }
+async function renderEtf() { await renderBoard("etf"); }
+
+async function renderBoard(kind) {
+  const etf = kind === "etf";
+  const { stocks, updated, note } = await api(etf ? "/etf" : "/board");
+  if (state.page !== kind) return;  // 받는 사이 다른 탭으로 옮겼으면 그리지 않는다
+  const sortKey = etf ? "sortEtf" : "sort";
+  const sort = store(sortKey) || "drop";
   const list = sort === "drop" ? [...stocks].sort((a, b) => a.drawdown - b.drawdown) : stocks;
   const count = (k) => stocks.filter((s) => s.tier?.key === k).length;
   const live = !state.status?.is_practice;
+  const notes = (note?.notes || []).filter((n) => n.startsWith(etf ? "ETF" : "주식"));
   view.innerHTML = `
+    ${notes.length ? `<div class="card note">📋 ${esc(dayLabel(note.date))} ${notes.map(esc).join("<br>")}</div>` : ""}
     <div class="summary">
-      <div class="sum buy"><div class="k">매수권장 (-20% 이상)</div><div class="v num">${count("buy")}<small> 종목</small></div></div>
-      <div class="sum review"><div class="k">매수검토 (-5 ~ -15%)</div><div class="v num">${count("review")}<small> 종목</small></div></div>
+      <div class="sum buy"><div class="k">매수권장 (-20% 이상)</div><div class="v num">${count("buy")}<small> 개</small></div></div>
+      <div class="sum review"><div class="k">매수검토 (-5 ~ -15%)</div><div class="v num">${count("review")}<small> 개</small></div></div>
     </div>
     <div class="board-head">
       <span class="board-time">${live ? `<b>${timeLabel(updated)}</b> 기준 · 1분마다 자동 갱신` : "연습용 데이터"}</span>
       <span class="sort">
         <button class="chip ${sort === "drop" ? "on" : ""}" data-sort="drop">하락률순</button>
-        <button class="chip ${sort === "cap" ? "on" : ""}" data-sort="cap">시총순</button>
+        <button class="chip ${sort === "cap" ? "on" : ""}" data-sort="cap">${etf ? "규모순" : "시총순"}</button>
       </span>
     </div>
     ${list.map(stockCard).join("")}
-    <p class="muted" style="margin:10px 4px">미국 시가총액 상위 10개 · 목록은 매월 1회 갱신합니다.</p>
+    <p class="muted" style="margin:10px 4px">${etf
+      ? "미국 ETF 규모 상위 10개 + 항상 보는 ETF · 순위는 매일 자동 갱신 · 알림 기준은 주식과 같습니다.<br>레버리지(3배) ETF는 움직임이 3배라 하락률도 크게 나옵니다."
+      : "미국 시가총액 상위 10개 · 순위는 매일 자동 갱신합니다."}</p>
   `;
   view.querySelectorAll("[data-sort]").forEach((b) => {
-    b.onclick = () => { store("sort", b.dataset.sort); renderHome(); };
+    b.onclick = () => { store(sortKey, b.dataset.sort); renderBoard(kind); };
   });
 }
 
@@ -94,6 +105,7 @@ async function renderHome() {
 setInterval(() => {
   if (document.visibilityState !== "visible" || state.status?.is_practice) return;
   if (state.page === "home") renderHome().catch(() => {});
+  if (state.page === "etf") renderEtf().catch(() => {});
   if (state.page === "mine") renderMine().catch(() => {});
 }, BOARD_REFRESH_MS);
 
@@ -222,10 +234,6 @@ async function makeBriefing() {
     btn.disabled = false;
     btn.textContent = "지금 만들기";
   }
-}
-
-function renderStage(stage, title, body) {
-  view.innerHTML = `<section class="card"><span class="stage">${stage}</span><h2>${title}</h2><p>${body}</p></section>`;
 }
 
 // ---------- 종목 상세 ----------
@@ -561,7 +569,7 @@ async function route() {
   $("#settings-btn").hidden = page === "settings";
   $("#title").textContent = TITLES[page] || "";
   try {
-    if (page === "etf") renderStage("4단계에서 추가", "ETF Top 10", "규모(순자산) 상위 10개 ETF를 Top 10과 같은 방식으로 보여줍니다. 알림 기준도 같습니다.");
+    if (page === "etf") await renderEtf();
     else if (page === "brief") await renderBrief();
     else if (page === "mine") await renderMine();
     else if (page === "alerts") await renderAlerts();

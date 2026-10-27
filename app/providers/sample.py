@@ -78,8 +78,16 @@ def _trading_dates() -> list[str]:
     return [x.isoformat() for x in days]
 
 
+def _default_script(symbol: str) -> list[tuple[int, float]]:
+    """따로 정해두지 않은 종목(ETF 등)은 이름으로 정해지는 완만한 흐름을 만든다."""
+    rng = random.Random("script:" + symbol)
+    base = rng.uniform(40, 500)
+    return [(0, base), (rng.randint(60, 200), base * rng.uniform(1.1, 1.5)),
+            (251, base * rng.uniform(0.85, 1.3)), (311, base * rng.uniform(0.8, 1.3))]
+
+
 def _series(symbol: str, dates: list[str]) -> list[Bar]:
-    points = SCRIPTS[symbol]
+    points = SCRIPTS.get(symbol) or _default_script(symbol)
     rng = random.Random(symbol)
     bars = []
     for i, day in enumerate(dates):

@@ -137,12 +137,15 @@ def check_holding(db: DB, h: dict, bars: list[Bar]) -> dict | None:
 
 
 def run_check(db: DB, provider: PriceProvider | None = None) -> list[dict]:
+    from . import universe
+
     provider = provider or get_provider(db)
+    universe.refresh(db, provider)  # 하루 한 번 Top 10 순위 갱신
     holdings = provider.holdings()
     held = {h["symbol"]: h for h in holdings}
     fx = provider.fx_rate()
     new_alerts = []
-    for stock in config.load_watchlist():
+    for stock in universe.everything(db):
         bars = provider.daily_bars(stock["symbol"])
         split = split_for(db, stock["symbol"], bars[-1].close, fx, held.get(stock["symbol"])) if bars else None
         alert = check_stock(db, stock, bars, split)
