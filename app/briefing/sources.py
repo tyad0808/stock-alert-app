@@ -145,10 +145,20 @@ def earnings_week(symbols: set[str], today: date) -> list[dict]:
     return result
 
 
-# ---- 무료 자동 번역 (MyMemory, 키 없이 하루 5,000자) ----
+# ---- 무료 자동 번역 (키 없이) ----
+# 구글 번역(웹 번역기와 같은 무료 주소)을 먼저 쓰고, 안 되면 MyMemory(하루 5,000자)를 쓴다.
 
-def translate_ko(text: str) -> str | None:
-    """영어 한 줄을 한국어로. 실패하거나 하루 한도를 넘으면 None (그때는 영어 그대로 보여준다)."""
+def _google_ko(text: str) -> str | None:
+    q = urllib.parse.urlencode({"client": "gtx", "sl": "en", "tl": "ko", "dt": "t", "q": text[:400]})
+    try:
+        data = json.loads(_get(f"https://translate.googleapis.com/translate_a/single?{q}"))
+        out = "".join(part[0] for part in data[0] if part and part[0])
+    except (SourceError, ValueError, TypeError, IndexError):
+        return None
+    return out.strip() or None
+
+
+def _mymemory_ko(text: str) -> str | None:
     q = urllib.parse.urlencode({"q": text[:400], "langpair": "en|ko"})
     try:
         data = json.loads(_get(f"https://api.mymemory.translated.net/get?{q}"))
@@ -158,3 +168,8 @@ def translate_ko(text: str) -> str | None:
     if data.get("responseStatus") not in (200, "200") or not out or "MYMEMORY" in out.upper():
         return None
     return html.unescape(out)
+
+
+def translate_ko(text: str) -> str | None:
+    """영어 한 줄을 한국어로. 둘 다 실패하면 None (그때는 영어 그대로 보여준다)."""
+    return _google_ko(text) or _mymemory_ko(text)

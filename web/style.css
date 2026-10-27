@@ -338,7 +338,6 @@ table.split tr.next td { font-weight: 800; }
 
 /* 아침 브리핑 */
 .brief h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.brief .page { font-size: 12px; font-weight: 700; color: #fff; background: var(--text-2); border-radius: 6px; padding: 2px 7px; }
 .brief-list { list-style: none; margin: 6px 0 0; padding: 0; }
 .brief-list li { padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.5; }
 .brief-list li:first-child { border-top: 0; }

@@ -88,11 +88,7 @@ def test_build_weekday_has_all_pages(db):
     run_check(db, provider)
     b = build_mod.build(db, provider, now=TUESDAY)
     assert b["date"] == "2026-10-27" and b["market_day"]
-    assert b["account"]["value_usd"] > 0
-    zones = b["zones"]["stocks"]
-    assert zones and all(z["tier"] for z in zones)
-    assert [z["drawdown"] for z in zones] == sorted(z["drawdown"] for z in zones)
-    assert all(z["new"] for z in zones)  # 첫 브리핑: 처음 확인에서 생긴 알림이 모두 NEW
+    assert "account" not in b and "zones" not in b  # 계좌·구간 종목은 다른 탭에서 본다
     issues = {s["symbol"]: s for s in b["issues"]["stocks"]}
     assert len(issues) == 10
     assert issues["MSFT"]["items"][0]["kind"] == "filing"
@@ -103,11 +99,10 @@ def test_build_weekday_has_all_pages(db):
     assert b["schedule"]["earnings"][0]["name"] == "애플"
 
 
-def test_monday_has_only_account_and_schedule(db):
+def test_monday_has_only_schedule(db):
     b = build_mod.build(db, SampleProvider(), now=MONDAY)
     assert not b["market_day"]
-    assert "zones" not in b and "issues" not in b
-    assert "account" in b and "schedule" in b
+    assert "issues" not in b and "schedule" in b
 
 
 def test_one_page_error_does_not_stop_briefing(db, monkeypatch):
@@ -117,16 +112,8 @@ def test_one_page_error_does_not_stop_briefing(db, monkeypatch):
     monkeypatch.setattr(sources, "earnings_week", broken)
     b = build_mod.build(db, SampleProvider(), now=TUESDAY)
     assert b["schedule"] == {"error": "nasdaq 접속 실패"}
-    assert "error" not in b["account"]
+    assert "error" not in b["issues"]
 
-
-def test_new_only_after_previous_briefing(db):
-    provider = SampleProvider()
-    run_check(db, provider)
-    first = build_mod.build(db, provider, now=TUESDAY)
-    db.save_briefing("2026-10-26", first)  # 어제 브리핑이 있었다고 치면, 그 뒤 새 알림이 없으니 NEW 없음
-    b = build_mod.build(db, provider, now=TUESDAY)
-    assert not any(z["new"] for z in b["zones"]["stocks"])
 
 
 def test_briefing_api(tmp_path, monkeypatch):

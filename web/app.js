@@ -165,28 +165,6 @@ async function renderAlerts() {
 // ---------- 아침 브리핑 ----------
 const briefErr = (part) => (part && part.error ? `<p class="muted">이 면을 만들지 못했습니다: ${esc(part.error)}</p>` : "");
 
-function briefAccount(a) {
-  if (!a || a.error) return briefErr(a);
-  return `<div class="row2 num">
-      <span>총 수익률 <b class="${updown(a.return_pct)}">${pct(a.return_pct, 2)}</b></span>
-      <span>전날 대비 <b class="${updown(a.day_change_pct)}">${pct(a.day_change_pct, 2)}</b></span>
-    </div>
-    <p class="num" style="margin-top:6px">평가금액 ${usd(a.value_usd)}${a.value_krw ? ` · 약 ${krwShort(a.value_krw)}` : ""}</p>
-    ${a.alerts.length ? `<ul class="brief-list">${a.alerts.map((x) =>
-      `<li><span class="tag ${x.kind}">${KIND_LABEL[x.kind]}</span> <b>${esc(x.name)}</b> 평단 대비 ${x.level > 0 ? "+" : ""}${x.level}% 구간 진입</li>`).join("")}</ul>`
-      : `<p class="muted" style="margin-top:6px">밤사이 수익·손실 구간에 새로 들어간 종목 없음</p>`}`;
-}
-
-function briefZones(z) {
-  if (!z || z.error) return briefErr(z);
-  if (!z.stocks.length) return `<p class="muted">매수권장·매수검토 구간 종목 없음</p>`;
-  return `<ul class="brief-list">${z.stocks.map((x) => `<li>
-      <a href="#/stock/${encodeURIComponent(x.symbol)}">${tierTag(x.tier)} <b>${esc(x.name)}</b></a>
-      1년 고점 대비 <b class="num">${pct(x.drawdown)}</b>${x.new ? ` <span class="tag newhigh">NEW</span>` : ""}
-      ${x.next_split ? `<span class="muted"> · ${x.next_split.n}차 ${krwShort(x.next_split.amount)}</span>` : ""}
-    </li>`).join("")}</ul>`;
-}
-
 function briefIssues(is) {
   if (!is || is.error) return briefErr(is);
   return `${is.stocks.map((x) => `<div class="issue">
@@ -217,17 +195,16 @@ async function renderBrief(date) {
     $("#brief-now").onclick = makeBriefing;
     return;
   }
-  const sec = (n, title, body) => `<section class="card brief"><h2><span class="page">${n}면</span>${title}</h2>${body}</section>`;
+  const sec = (title, body) => `<section class="card brief"><h2>${title}</h2>${body}</section>`;
   view.innerHTML = `
     <div class="board-head">
       <span class="board-time"><b>${dayLabel(b.date)}</b> 아침 브리핑 · ${timeLabel(b.created_at)} 작성${b.is_practice ? " · 연습용 데이터" : ""}</span>
       <select id="brief-date" class="chip">${dates.map((d) => `<option value="${d}" ${d === b.date ? "selected" : ""}>${d}</option>`).join("")}</select>
     </div>
-    ${sec(1, "내 계좌", briefAccount(b.account))}
-    ${b.market_day ? sec(2, "매수권장 · 매수검토", briefZones(b.zones)) + sec(3, "Top 10 이슈", briefIssues(b.issues))
-      : `<p class="muted" style="margin:0 4px 12px">일·월요일 아침은 전날 미국 장이 없어 계좌와 일정만 담습니다.</p>`}
-    ${sec(4, "이번 주 일정", briefSchedule(b.schedule))}
-    <p class="muted" style="margin:10px 4px">사실만 모았습니다. 3·4면 뉴스·공시는 알림 판단에 쓰지 않습니다.</p>
+    ${b.market_day && b.issues ? sec("Top 10 이슈", briefIssues(b.issues))
+      : `<p class="muted" style="margin:0 4px 12px">일·월요일 아침은 전날 미국 장이 없어 일정만 담습니다.</p>`}
+    ${sec("이번 주 일정", briefSchedule(b.schedule))}
+    <p class="muted" style="margin:10px 4px">사실만 모았습니다. 뉴스·공시는 알림 판단에 쓰지 않습니다.</p>
     <p style="text-align:center"><button class="btn ghost" id="brief-now">지금 다시 만들기</button></p>`;
   $("#brief-date").onchange = (e) => renderBrief(e.target.value);
   $("#brief-now").onclick = makeBriefing;
