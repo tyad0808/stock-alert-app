@@ -32,27 +32,23 @@ STOCKS = ["NVDA", "MSFT", "AAPL", "GOOGL", "GOOG", "AMZN", "META", "AVGO", "LLY"
 
 def test_defaults_without_rankings(db):
     assert len(universe.stocks(db)) == 10
-    assert [e["symbol"] for e in universe.etfs(db)][-3:] == ["SOXL", "TQQQ", "SOXX"]
+    assert [e["symbol"] for e in universe.etfs(db)] == ["TQQQ", "SOXL", "SOXX", "VOO", "IVV", "SPY"]
 
 
 def test_refresh_picks_top10_skipping_duplicate_classes(db):
-    etf = rows("VOO", "IVV", "SPY", "VTI", "QQQ", "VUG", "VEA", "IEFA", "VTV", "BND", "SOXX")
-    notes = universe.refresh(db, Ranked(rows(*STOCKS), etf))
+    notes = universe.refresh(db, Ranked(rows(*STOCKS), None))
     syms = [s["symbol"] for s in universe.stocks(db)]
     assert syms == ["NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "AVGO", "LLY", "BRK.B", "TSM"]
     assert universe.stocks(db)[0]["name"] == "엔비디아"  # 한국어 이름은 우리 목록 것
-    assert notes == ["주식 Top 10 변경: LLY 들어옴 · 테슬라 빠짐"]
-    # SOXX 가 Top 10 안에 없으니 extra 로 한 번만
-    etfs = [e["symbol"] for e in universe.etfs(db)]
-    assert etfs.count("SOXX") == 1
+    assert notes == ["Top 10 변경: LLY 들어옴 · 테슬라 빠짐"]
     assert universe.note(db)["notes"] == notes
 
 
 def test_failure_keeps_list_and_retries_later(db):
-    universe.refresh(db, Ranked(RuntimeError("키움 오류"), RuntimeError("키움 오류")))
+    universe.refresh(db, Ranked(RuntimeError("키움 오류"), None))
     assert len(universe.stocks(db)) == 10  # 기본 목록 그대로
     assert db.get_meta("universe_date") is None  # 다음 확인 때 다시 시도
-    universe.refresh(db, Ranked(rows(*STOCKS), RuntimeError("키움 오류")))
+    universe.refresh(db, Ranked(rows(*STOCKS), None))
     assert "LLY" in [s["symbol"] for s in universe.stocks(db)]
     assert universe.refresh(db, Ranked(rows("X"), rows())) == []  # 오늘은 이미 갱신함
 

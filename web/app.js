@@ -56,7 +56,6 @@ function stockCard(s) {
   return `<a class="stock ${cls}" href="#/stock/${encodeURIComponent(s.symbol)}">
     <div class="name">${esc(s.name)}<span class="sym">${esc(s.symbol)}</span>
       ${tierTag(s.tier)}${s.new_high ? `<span class="tag newhigh">신고가</span>` : ""}${s.held ? `<span class="tag held">보유</span>` : ""}
-      ${s.extra ? `<span class="tag out">항상 보기</span>` : ""}
       ${s.data_warning ? `<span class="tag warn">데이터 확인 필요</span>` : ""}</div>
     <div class="price num">${usd(s.price)}</div>
     <div class="high num">1년 고점 <b>${usd(s.high)}</b></div>
@@ -77,7 +76,7 @@ async function renderBoard(kind) {
   const list = sort === "drop" ? [...stocks].sort((a, b) => a.drawdown - b.drawdown) : stocks;
   const count = (k) => stocks.filter((s) => s.tier?.key === k).length;
   const live = !state.status?.is_practice;
-  const notes = (note?.notes || []).filter((n) => n.startsWith(etf ? "ETF" : "주식"));
+  const notes = etf ? [] : note?.notes || [];
   view.innerHTML = `
     ${notes.length ? `<div class="card note">📋 ${esc(dayLabel(note.date))} ${notes.map(esc).join("<br>")}</div>` : ""}
     <div class="summary">
@@ -88,12 +87,12 @@ async function renderBoard(kind) {
       <span class="board-time">${live ? `<b>${timeLabel(updated)}</b> 기준 · 1분마다 자동 갱신` : "연습용 데이터"}</span>
       <span class="sort">
         <button class="chip ${sort === "drop" ? "on" : ""}" data-sort="drop">하락률순</button>
-        <button class="chip ${sort === "cap" ? "on" : ""}" data-sort="cap">${etf ? "규모순" : "시총순"}</button>
+        <button class="chip ${sort === "cap" ? "on" : ""}" data-sort="cap">${etf ? "기본순" : "시총순"}</button>
       </span>
     </div>
     ${list.map(stockCard).join("")}
     <p class="muted" style="margin:10px 4px">${etf
-      ? "미국 ETF 규모 상위 10개 + 항상 보는 ETF · 순위는 매일 자동 갱신 · 알림 기준은 주식과 같습니다.<br>레버리지(3배) ETF는 움직임이 3배라 하락률도 크게 나옵니다."
+      ? "알림 기준은 주식과 같습니다.<br>TQQQ·SOXL은 3배 레버리지라 하락률이 크게 나옵니다."
       : "미국 시가총액 상위 10개 · 순위는 매일 자동 갱신합니다."}</p>
   `;
   view.querySelectorAll("[data-sort]").forEach((b) => {

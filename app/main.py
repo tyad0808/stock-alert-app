@@ -127,8 +127,7 @@ def status(request: Request):
 def _board(items: list[dict]) -> list[dict]:
     provider = get_provider(db)
     held = {h["symbol"] for h in provider.holdings()}
-    return [{**quote(st, provider.daily_bars(st["symbol"])), "held": st["symbol"] in held,
-             **{k: st[k] for k in ("rank", "extra") if k in st}} for st in items]
+    return [{**quote(st, provider.daily_bars(st["symbol"])), "held": st["symbol"] in held} for st in items]
 
 
 @app.get("/api/board")
@@ -139,8 +138,8 @@ def board():
 
 @app.get("/api/etf")
 def etf_board():
-    """ETF 시세판: 규모 Top 10 + 항상 보는 ETF. 알림 기준은 주식과 같다."""
-    return {"stocks": _board(universe.etfs(db)), "updated": now_kst(), "note": universe.note(db)}
+    """ETF 시세판: 정해 둔 ETF. 알림 기준은 주식과 같다."""
+    return {"stocks": _board(universe.etfs(db)), "updated": now_kst()}
 
 
 @app.get("/api/holdings")

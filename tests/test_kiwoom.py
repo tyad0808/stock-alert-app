@@ -167,7 +167,7 @@ def test_only_read_only_apis_allowed():
     p = FakeProvider(lambda *_: ({"return_code": 0}, {}))
     with pytest.raises(KiwoomError, match="조회 전용"):
         p._call("ust12345", {})  # 목록에 없는 기능은 무엇이든 막힌다
-    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301", "usa10099", "usa20550", "usa20551"}
+    assert set(kiwoom.READ_ONLY_APIS) == {"usa06012", "ust21070", "ust31301", "usa10099", "usa20550"}
 
 
 def test_no_order_code_in_provider():

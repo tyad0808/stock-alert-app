@@ -29,7 +29,6 @@ READ_ONLY_APIS = {
     "ust31301": "/api/us/exchange",  # 환율 조회
     "usa10099": "/api/us/stkinfo",   # 미국주식 종목리스트 (BRK.B 처럼 표기가 다른 종목의 코드 찾기)
     "usa20550": "/api/us/rkinfo",    # 미국주식 시가총액 상위 (주식 Top 10 자동 갱신)
-    "usa20551": "/api/us/rkinfo",    # 미국 ETF 시가총액 상위 (ETF Top 10 자동 갱신)
 }
 
 # 거래소 코드: ND 나스닥, NY 뉴욕, NA 아멕스
@@ -284,11 +283,10 @@ class KiwoomProvider(PriceProvider):
     # ---- 순위 ----
 
     def rankings(self, kind: str) -> list[dict]:
-        """시가총액 상위 (kind: stocks / etf). [{symbol, name, exchange}] 순위순."""
-        api_id = "usa20550" if kind == "stocks" else "usa20551"
-        body = {"stex_tp": "0", "trde_qty_tp": "0", "stk_cnd": "0", "pric_cnd": "0", "trde_prica_cnd": "0"}
-        body.update({"inds_cd": "", "stk_tp": "1"} if kind == "stocks" else {"etf_cat1": "", "etf_cat2": ""})
-        data, _ = self._call(api_id, body)
+        """주식 시가총액 상위. [{symbol, name, exchange}] 순위순."""
+        body = {"stex_tp": "0", "inds_cd": "", "stk_tp": "1", "trde_qty_tp": "0", "stk_cnd": "0",
+                "pric_cnd": "0", "trde_prica_cnd": "0"}
+        data, _ = self._call("usa20550", body)
         rows = sorted(data.get("result_list") or [], key=lambda r: _num(r.get("rank")) or 9999)
         result = []
         for r in rows:
@@ -402,7 +400,6 @@ def _diagnose() -> None:
     from .. import universe
 
     step("주식 시가총액 순위", lambda: ", ".join(r["symbol"] for r in p.rankings("stocks")[:12]))
-    step("ETF 시가총액 순위", lambda: ", ".join(r["symbol"] for r in p.rankings("etf")[:12]))
     for st in universe.everything():
         step(f"{st['symbol']} 시세", lambda st=st: (lambda b: (
             f"{len(b)}일치 {b[0].date}~{b[-1].date}, 최근 종가 ${b[-1].close:,.2f}, "

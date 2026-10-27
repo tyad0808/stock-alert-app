@@ -1,7 +1,7 @@
-"""감시 목록: 주식 Top 10(시가총액)과 ETF Top 10(규모) + 항상 보는 ETF.
+"""감시 목록: 주식 Top 10(시가총액)과 ETF(정해 둔 목록).
 
-키움 시가총액 순위로 하루 한 번 자동 갱신한다. 순위를 못 받으면 마지막으로 받은 목록,
-그것도 없으면 config/watchlist.json · config/etf.json 을 쓴다.
+주식 Top 10은 키움 시가총액 순위로 하루 한 번 자동 갱신한다. 순위를 못 받으면 마지막으로 받은 목록,
+그것도 없으면 config/watchlist.json 을 쓴다. ETF는 config/etf.json 그대로 본다.
 """
 
 import json
@@ -28,22 +28,9 @@ def stocks(db: DB | None = None) -> list[dict]:
     return _saved(db, "stocks") or _file("watchlist.json")["stocks"]
 
 
-def etf_top(db: DB | None = None) -> list[dict]:
-    """ETF Top 10 (규모순)."""
-    return _saved(db, "etf") or _file("etf.json")["stocks"]
-
-
-def etf_extra() -> list[dict]:
-    """순위와 상관없이 항상 보는 ETF."""
-    return _file("etf.json").get("extra", [])
-
-
 def etfs(db: DB | None = None) -> list[dict]:
-    """ETF 탭 전체: Top 10 다음에 항상 보는 ETF (겹치면 한 번만)."""
-    top = etf_top(db)
-    seen = {e["symbol"] for e in top}
-    return [{**e, "rank": i + 1} for i, e in enumerate(top)] + [
-        {**e, "extra": True} for e in etf_extra() if e["symbol"] not in seen]
+    """ETF 탭: 정해 둔 목록 그대로."""
+    return _file("etf.json")["stocks"]
 
 
 def everything(db: DB | None = None) -> list[dict]:
@@ -79,10 +66,9 @@ def refresh(db: DB, provider) -> list[str]:
     if db.get_meta("universe_date") == today or not hasattr(provider, "rankings"):
         return []
     # 한국어 이름은 우리 목록에 있는 이름을 먼저 쓴다
-    names = {s["symbol"]: s["name"] for s in _file("watchlist.json")["stocks"] + _file("etf.json")["stocks"]
-             + etf_extra() + stocks(db) + etf_top(db)}
+    names = {s["symbol"]: s["name"] for s in _file("watchlist.json")["stocks"] + stocks(db)}
     notes, ok = [], False
-    for kind, label, current in (("stocks", "주식", stocks(db)), ("etf", "ETF", etf_top(db))):
+    for kind, label, current in (("stocks", "주식", stocks(db)),):
         try:
             new = _pick(provider.rankings(kind), names)
         except Exception as e:  # noqa: BLE001 — 순위를 못 받으면 어제 목록 그대로
@@ -96,7 +82,7 @@ def refresh(db: DB, provider) -> list[str]:
         if old_syms != new_syms:
             came = [s["name"] for s in new if s["symbol"] not in old_syms]
             went = [s["name"] for s in current if s["symbol"] not in new_syms]
-            notes.append(f"{label} Top 10 변경: {', '.join(came)} 들어옴 · {', '.join(went)} 빠짐")
+            notes.append(f"Top 10 변경: {', '.join(came)} 들어옴 · {', '.join(went)} 빠짐")
         db.set_meta(f"universe:{kind}", json.dumps(new, ensure_ascii=False))
     if ok:  # 실패했으면 15분 뒤 다시 시도
         db.set_meta("universe_date", today)

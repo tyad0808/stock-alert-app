@@ -72,9 +72,7 @@ def test_reset(client):
 def test_etf_board(client):
     d = client.get("/api/etf").json()
     syms = [s["symbol"] for s in d["stocks"]]
-    assert syms[:3] == ["VOO", "IVV", "SPY"] and len(syms) == 13
-    assert {"SOXL", "TQQQ", "SOXX"} <= set(syms)
-    assert d["stocks"][0]["rank"] == 1 and d["stocks"][-1]["extra"] is True
+    assert syms == ["TQQQ", "SOXL", "SOXX", "VOO", "IVV", "SPY"]
     assert client.get("/api/stock/SOXL").status_code == 200
 
 

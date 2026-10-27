@@ -1,21 +1,12 @@
 {
-  "note": "미국 ETF 규모(시가총액) 상위 10개. 키움 순위로 매일 자동 갱신하고, 순위를 못 받으면 이 목록을 쓴다. extra 는 순위와 상관없이 항상 함께 본다.",
+  "note": "ETF 탭에서 보는 ETF. 순위와 상관없이 이 목록 그대로 본다. exchange: ND 나스닥, NY 뉴욕, NA 아멕스(아카)",
   "updated": "2026-10-27",
   "stocks": [
+    {"symbol": "TQQQ", "name": "프로셰어즈 나스닥100 3배", "exchange": "ND"},
+    {"symbol": "SOXL", "name": "디렉시온 반도체 3배", "exchange": "NA"},
+    {"symbol": "SOXX", "name": "아이셰어즈 반도체", "exchange": "ND"},
     {"symbol": "VOO", "name": "뱅가드 S&P500", "exchange": "NA"},
     {"symbol": "IVV", "name": "아이셰어즈 S&P500", "exchange": "NA"},
-    {"symbol": "SPY", "name": "SPDR S&P500", "exchange": "NA"},
-    {"symbol": "VTI", "name": "뱅가드 미국 전체 주식", "exchange": "NA"},
-    {"symbol": "QQQ", "name": "인베스코 나스닥100", "exchange": "ND"},
-    {"symbol": "VUG", "name": "뱅가드 성장주", "exchange": "NA"},
-    {"symbol": "VEA", "name": "뱅가드 선진국", "exchange": "NA"},
-    {"symbol": "IEFA", "name": "아이셰어즈 선진국", "exchange": "NA"},
-    {"symbol": "VTV", "name": "뱅가드 가치주", "exchange": "NA"},
-    {"symbol": "BND", "name": "뱅가드 미국 채권", "exchange": "ND"}
-  ],
-  "extra": [
-    {"symbol": "SOXL", "name": "디렉시온 반도체 3배", "exchange": "NA"},
-    {"symbol": "TQQQ", "name": "프로셰어즈 나스닥100 3배", "exchange": "ND"},
-    {"symbol": "SOXX", "name": "아이셰어즈 반도체", "exchange": "ND"}
+    {"symbol": "SPY", "name": "SPDR S&P500", "exchange": "NA"}
   ]
 }

@@ -1,6 +1,6 @@
 // 앱 화면 파일을 폰에 저장해 두어 빨리 열리게 한다.
 // 시세·알림 데이터(/api)는 저장하지 않고 항상 서버에서 새로 받는다.
-const CACHE = "shell-v7";
+const CACHE = "shell-v8";
 const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
