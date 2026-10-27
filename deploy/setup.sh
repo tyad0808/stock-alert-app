@@ -202,7 +202,8 @@ systemctl enable --now stock-alert-backup.timer
 bash "$APP_DIR/deploy/briefing-timer.sh"
 
 say "7/7 HTTPS(Caddy)와 방화벽을 설정합니다"
-cat > /etc/caddy/Caddyfile <<CADDY
+# 같은 서버의 다른 주소(예: 광고영상 도구 ad.)가 이미 들어 있으면 지우지 않고 덧붙인다
+SITE_BLOCK=$(cat <<CADDY
 # $DOMAIN 으로 들어온 요청을 앱(내부 8000번)으로 전달. HTTPS 인증서는 자동 발급·갱신
 $DOMAIN {
 	encode gzip
@@ -215,6 +216,14 @@ $DOMAIN {
 	}
 }
 CADDY
+)
+if grep -q "^$DOMAIN {" /etc/caddy/Caddyfile 2>/dev/null; then
+  echo "Caddy 에 $DOMAIN 이 이미 있습니다. 그대로 둡니다."
+elif grep -Eq '^[a-z0-9-]+(\.[a-z0-9-]+)+ \{' /etc/caddy/Caddyfile 2>/dev/null; then
+  printf '\n%s\n' "$SITE_BLOCK" >> /etc/caddy/Caddyfile
+else
+  printf '%s\n' "$SITE_BLOCK" > /etc/caddy/Caddyfile
+fi
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl reload caddy || systemctl restart caddy
 
