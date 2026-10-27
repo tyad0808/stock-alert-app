@@ -133,6 +133,21 @@ bash /opt/stock-alert/app/deploy/kiwoom.sh
 
 ---
 
+## 8. 아침 브리핑 (서버에서)
+
+새 코드를 받으면(`update.sh`) 매일 **08:50** 브리핑이 자동으로 만들어집니다. 폰 앱 **[브리핑]** 탭에서 봅니다.
+
+- Claude 키가 없어도 계좌·매수권장/검토·공시·실적 일정은 나옵니다.
+- 뉴스 요약까지 보려면 Claude 키를 넣습니다.
+  ```bash
+  bash /opt/stock-alert/app/deploy/claude.sh
+  ```
+  `Claude 키:` → 키를 마우스 오른쪽 버튼으로 붙여넣기 → Enter (화면에 안 보이는 게 정상)
+
+> ⚠️ Claude 키도 **채팅창에 절대 붙여넣지 마세요.**
+
+---
+
 ## 자주 쓰는 명령어 (서버에서)
 
 | 하고 싶은 일 | 명령어 |
@@ -141,5 +156,6 @@ bash /opt/stock-alert/app/deploy/kiwoom.sh
 | 앱 상태 보기 | `systemctl status stock-alert --no-pager` |
 | 최근 기록 보기 | `journalctl -u stock-alert -n 30 --no-pager` |
 | 키움 연결 점검만 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.providers.kiwoom` |
+| 브리핑 지금 다시 만들기 | `cd /opt/stock-alert/app && runuser -u stockalert -- /opt/stock-alert/venv/bin/python -m app.briefing --force` |
 | 시세 확인 지금 1번 | `systemctl start stock-alert-check` |
 | 백업 지금 1번 | `systemctl start stock-alert-backup` |

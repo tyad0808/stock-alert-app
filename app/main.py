@@ -210,6 +210,20 @@ def set_split(symbol: str, body: SplitBody):
     return {"split": split_for(db, symbol, bars[-1].close, provider.fx_rate(), held)}
 
 
+@app.get("/api/briefing")
+def briefing(date: str | None = None):
+    """아침 브리핑. 날짜가 없으면 가장 최근 것, 지난 날짜 목록도 함께 준다."""
+    return {"briefing": db.briefing(date), "dates": db.briefing_dates()}
+
+
+@app.post("/api/briefing")
+def make_briefing():
+    """브리핑을 지금 새로 만든다 (설정 화면의 '지금 만들기')."""
+    from .briefing.build import run
+
+    return {"briefing": run(db, force=True), "dates": db.briefing_dates()}
+
+
 @app.get("/api/alerts")
 def alerts():
     return {"alerts": db.alerts()}

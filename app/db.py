@@ -2,6 +2,7 @@
 
 연습 "처음부터"는 구간·알림 기록만 지우고 3분할 계획은 남긴다."""
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,6 +29,12 @@ CREATE TABLE IF NOT EXISTS holding_state (
 CREATE TABLE IF NOT EXISTS split_plan (
     symbol TEXT PRIMARY KEY,
     total_krw INTEGER NOT NULL
+);
+-- 아침 브리핑 (날짜별 1개, 내용은 JSON)
+CREATE TABLE IF NOT EXISTS briefing (
+    date TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    data TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS alert (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +122,26 @@ class DB:
         sql += " ORDER BY id DESC LIMIT ?"
         args.append(limit)
         return [dict(r) for r in self.conn.execute(sql, args).fetchall()]
+
+    def alerts_since(self, since: str) -> list[dict]:
+        """이 시각 이후에 생긴 알림 (오래된 것부터)."""
+        rows = self.conn.execute("SELECT * FROM alert WHERE created_at > ? ORDER BY id", (since,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_briefing(self, date: str, data: dict) -> None:
+        self.conn.execute("REPLACE INTO briefing (date, created_at, data) VALUES (?, ?, ?)",
+                          (date, data.get("created_at") or now_kst(), json.dumps(data, ensure_ascii=False)))
+        self.conn.commit()
+
+    def briefing(self, date: str | None = None) -> dict | None:
+        """그 날짜의 브리핑. 날짜가 없으면 가장 최근 것."""
+        sql = "SELECT data FROM briefing WHERE date = ?" if date else "SELECT data FROM briefing ORDER BY date DESC LIMIT 1"
+        row = self.conn.execute(sql, (date,) if date else ()).fetchone()
+        return json.loads(row["data"]) if row else None
+
+    def briefing_dates(self, limit: int = 60) -> list[str]:
+        rows = self.conn.execute("SELECT date FROM briefing ORDER BY date DESC LIMIT ?", (limit,)).fetchall()
+        return [r["date"] for r in rows]
 
     def reset(self) -> None:
         """연습을 처음부터 다시 할 때 쓴다."""

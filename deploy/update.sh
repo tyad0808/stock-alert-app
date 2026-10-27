@@ -18,6 +18,9 @@ git pull --ff-only
 echo "▶ 부품 설치"
 "$VENV/bin/pip" install --quiet -r requirements.txt
 
+echo "▶ 자동 작업 등록"
+bash "$APP_DIR/deploy/briefing-timer.sh"
+
 echo "▶ 재시작"
 systemctl restart stock-alert
 sleep 2

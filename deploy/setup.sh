@@ -9,7 +9,7 @@
 #  2. 파이썬 실행 환경, Caddy(HTTPS 자동) 설치
 #  3. 앱 전용 계정(stockalert) 생성, 데이터 폴더 준비, .env 만들기 (앱 비밀번호 입력)
 #  4. 앱을 서비스로 등록 (재부팅해도 자동 시작, 멈추면 자동 재시작)
-#  5. 15분마다 시세 확인, 매일 새벽 4시 기록 백업
+#  5. 15분마다 시세 확인, 매일 새벽 4시 기록 백업, 매일 08:50 아침 브리핑
 #  6. 방화벽(22, 80, 443 만 열기), 비밀번호 무작위 대입 공격 차단(fail2ban)
 #
 # 여러 번 실행해도 안전하다 (이미 된 단계는 건너뛴다).
@@ -104,6 +104,9 @@ DATA_SOURCE=sample
 # 키움 REST API — 조회 전용. 키를 넣은 뒤 DATA_SOURCE=kiwoom 으로 바꾸고 재시작
 KIWOOM_APP_KEY=
 KIWOOM_APP_SECRET=
+
+# 아침 브리핑 뉴스 요약 (deploy/claude.sh 로 입력)
+ANTHROPIC_API_KEY=
 ENV
   unset PW1 PW2
   echo ".env 를 새로 만들었습니다 (로그인 유지용 비밀값 자동 생성)."
@@ -196,6 +199,7 @@ systemctl daemon-reload
 systemctl enable --now stock-alert.service
 systemctl enable --now stock-alert-check.timer
 systemctl enable --now stock-alert-backup.timer
+bash "$APP_DIR/deploy/briefing-timer.sh"
 
 say "7/7 HTTPS(Caddy)와 방화벽을 설정합니다"
 cat > /etc/caddy/Caddyfile <<CADDY

@@ -335,3 +335,19 @@ table.split tr.next td { font-weight: 800; }
   main, .practice { max-width: 600px; margin-left: auto; margin-right: auto; }
   .practice { margin-bottom: 8px; }
 }
+
+/* 아침 브리핑 */
+.brief h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.brief .page { font-size: 12px; font-weight: 700; color: #fff; background: var(--text-2); border-radius: 6px; padding: 2px 7px; }
+.brief-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.brief-list li { padding: 7px 0; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.5; }
+.brief-list li:first-child { border-top: 0; }
+.brief-list a { color: inherit; text-decoration: none; }
+.brief-list a.src { color: var(--series); font-size: 13px; margin-left: 4px; text-decoration: underline; }
+.issue { padding: 10px 0; border-top: 1px solid var(--line); }
+.issue:first-child { border-top: 0; padding-top: 0; }
+.issue-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; }
+.issue-head .num { font-size: 13px; color: var(--text-2); }
+.issue .brief-list li { font-size: 14px; }
+.btn.ghost { background: transparent; color: var(--text-2); border: 1px solid var(--line); }
+#brief-now { width: auto; padding: 12px 20px; }

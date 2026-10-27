@@ -162,6 +162,90 @@ async function renderAlerts() {
   view.innerHTML = alertList(alerts);
 }
 
+// ---------- 아침 브리핑 ----------
+const briefErr = (part) => (part && part.error ? `<p class="muted">이 면을 만들지 못했습니다: ${esc(part.error)}</p>` : "");
+
+function briefAccount(a) {
+  if (!a || a.error) return briefErr(a);
+  return `<div class="row2 num">
+      <span>총 수익률 <b class="${updown(a.return_pct)}">${pct(a.return_pct, 2)}</b></span>
+      <span>전날 대비 <b class="${updown(a.day_change_pct)}">${pct(a.day_change_pct, 2)}</b></span>
+    </div>
+    <p class="num" style="margin-top:6px">평가금액 ${usd(a.value_usd)}${a.value_krw ? ` · 약 ${krwShort(a.value_krw)}` : ""}</p>
+    ${a.alerts.length ? `<ul class="brief-list">${a.alerts.map((x) =>
+      `<li><span class="tag ${x.kind}">${KIND_LABEL[x.kind]}</span> <b>${esc(x.name)}</b> 평단 대비 ${x.level > 0 ? "+" : ""}${x.level}% 구간 진입</li>`).join("")}</ul>`
+      : `<p class="muted" style="margin-top:6px">밤사이 수익·손실 구간에 새로 들어간 종목 없음</p>`}`;
+}
+
+function briefZones(z) {
+  if (!z || z.error) return briefErr(z);
+  if (!z.stocks.length) return `<p class="muted">매수권장·매수검토 구간 종목 없음</p>`;
+  return `<ul class="brief-list">${z.stocks.map((x) => `<li>
+      <a href="#/stock/${encodeURIComponent(x.symbol)}">${tierTag(x.tier)} <b>${esc(x.name)}</b></a>
+      1년 고점 대비 <b class="num">${pct(x.drawdown)}</b>${x.new ? ` <span class="tag newhigh">NEW</span>` : ""}
+      ${x.next_split ? `<span class="muted"> · ${x.next_split.n}차 ${krwShort(x.next_split.amount)}</span>` : ""}
+    </li>`).join("")}</ul>`;
+}
+
+function briefIssues(is) {
+  if (!is || is.error) return briefErr(is);
+  return `${is.stocks.map((x) => `<div class="issue">
+      <div class="issue-head"><b>${esc(x.name)}</b>
+        <span class="num">전일 <b class="${updown(x.change_pct)}">${pct(x.change_pct, 2)}</b> · 1년 고점 대비 ${pct(x.drawdown)}</span></div>
+      ${x.items.length ? `<ul class="brief-list">${x.items.map((it) =>
+        `<li>${it.kind === "filing" ? `<span class="tag drop">공시</span> ` : ""}${esc(it.text)}
+          <a class="src" href="${esc(it.link)}" target="_blank" rel="noopener">원문</a></li>`).join("")}</ul>`
+        : `<p class="muted">특이사항 없음</p>`}
+    </div>`).join("")}
+    ${is.summary_on ? "" : `<p class="muted" style="margin-top:8px">뉴스 요약은 Claude 연결 후 표시됩니다. 지금은 공시만 보여줍니다.</p>`}
+    ${(is.warnings || []).map((w) => `<p class="muted">⚠ ${esc(w)}</p>`).join("")}`;
+}
+
+function briefSchedule(s) {
+  if (!s || s.error) return briefErr(s);
+  if (!s.earnings.length) return `<p class="muted">이번 주 예정된 실적 발표 없음</p>`;
+  return `<ul class="brief-list">${s.earnings.map((e) =>
+    `<li><b>${esc(e.name)}</b> 실적 발표 <span class="num">${dayLabel(e.date)}</span>${e.time ? ` · ${esc(e.time)}` : ""} <span class="muted">(미국 날짜)</span></li>`).join("")}</ul>`;
+}
+
+async function renderBrief(date) {
+  const { briefing: b, dates } = await api("/briefing" + (date ? `?date=${encodeURIComponent(date)}` : ""));
+  if (!b) {
+    view.innerHTML = `<div class="empty">아직 브리핑이 없습니다.<br>매일 오전 9시 전에 만들어집니다.</div>
+      <p style="text-align:center"><button class="btn" id="brief-now">지금 만들기</button></p>`;
+    $("#brief-now").onclick = makeBriefing;
+    return;
+  }
+  const sec = (n, title, body) => `<section class="card brief"><h2><span class="page">${n}면</span>${title}</h2>${body}</section>`;
+  view.innerHTML = `
+    <div class="board-head">
+      <span class="board-time"><b>${dayLabel(b.date)}</b> 아침 브리핑 · ${timeLabel(b.created_at)} 작성${b.is_practice ? " · 연습용 데이터" : ""}</span>
+      <select id="brief-date" class="chip">${dates.map((d) => `<option value="${d}" ${d === b.date ? "selected" : ""}>${d}</option>`).join("")}</select>
+    </div>
+    ${sec(1, "내 계좌", briefAccount(b.account))}
+    ${b.market_day ? sec(2, "매수권장 · 매수검토", briefZones(b.zones)) + sec(3, "Top 10 이슈", briefIssues(b.issues))
+      : `<p class="muted" style="margin:0 4px 12px">일·월요일 아침은 전날 미국 장이 없어 계좌와 일정만 담습니다.</p>`}
+    ${sec(4, "이번 주 일정", briefSchedule(b.schedule))}
+    <p class="muted" style="margin:10px 4px">사실만 모았습니다. 3·4면 뉴스·공시는 알림 판단에 쓰지 않습니다.</p>
+    <p style="text-align:center"><button class="btn ghost" id="brief-now">지금 다시 만들기</button></p>`;
+  $("#brief-date").onchange = (e) => renderBrief(e.target.value);
+  $("#brief-now").onclick = makeBriefing;
+}
+
+async function makeBriefing() {
+  const btn = $("#brief-now");
+  btn.disabled = true;
+  btn.textContent = "만드는 중… (1분쯤 걸려요)";
+  try {
+    await api("/briefing", {});
+    await renderBrief();
+  } catch (e) {
+    if (e.message !== "login") toast(e.message);
+    btn.disabled = false;
+    btn.textContent = "지금 만들기";
+  }
+}
+
 function renderStage(stage, title, body) {
   view.innerHTML = `<section class="card"><span class="stage">${stage}</span><h2>${title}</h2><p>${body}</p></section>`;
 }
@@ -447,7 +531,7 @@ async function route() {
   $("#title").textContent = TITLES[page] || "";
   try {
     if (page === "etf") renderStage("4단계에서 추가", "ETF Top 10", "규모(순자산) 상위 10개 ETF를 Top 10과 같은 방식으로 보여줍니다. 알림 기준도 같습니다.");
-    else if (page === "brief") renderStage("3단계에서 추가", "아침 브리핑", "매일 오전 9시, 밤사이 알림과 Top 10 이슈를 신문처럼 한 번에 모아 보여줍니다.");
+    else if (page === "brief") await renderBrief();
     else if (page === "mine") await renderMine();
     else if (page === "alerts") await renderAlerts();
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg));

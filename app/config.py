@@ -57,6 +57,12 @@ APP_SECRET = os.environ.get("APP_SECRET", "")
 KIWOOM_APP_KEY = os.environ.get("KIWOOM_APP_KEY", "")
 KIWOOM_APP_SECRET = os.environ.get("KIWOOM_APP_SECRET", "")
 
+# 아침 브리핑: 뉴스 요약은 Claude API (키가 없으면 공시만 보여준다)
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+BRIEFING_MODEL = os.environ.get("BRIEFING_MODEL", "claude-opus-5-5")
+# 미국 공시(SEC)는 연락처가 담긴 이름으로 요청해야 한다
+SEC_USER_AGENT = os.environ.get("SEC_USER_AGENT", "stock-alert-app (+https://alert.broadstore.co.kr)")
+
 
 def load_watchlist() -> list[dict]:
     data = json.loads((ROOT / "config" / "watchlist.json").read_text(encoding="utf-8"))
