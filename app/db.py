@@ -30,6 +30,12 @@ CREATE TABLE IF NOT EXISTS split_plan (
     symbol TEXT PRIMARY KEY,
     total_krw INTEGER NOT NULL
 );
+-- 폰 알림(웹 푸시) 받을 기기
+CREATE TABLE IF NOT EXISTS push_sub (
+    endpoint TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 -- 아침 브리핑 (날짜별 1개, 내용은 JSON)
 CREATE TABLE IF NOT EXISTS briefing (
     date TEXT PRIMARY KEY,
@@ -142,6 +148,18 @@ class DB:
     def briefing_dates(self, limit: int = 60) -> list[str]:
         rows = self.conn.execute("SELECT date FROM briefing ORDER BY date DESC LIMIT ?", (limit,)).fetchall()
         return [r["date"] for r in rows]
+
+    def add_push_sub(self, sub: dict) -> None:
+        self.conn.execute("REPLACE INTO push_sub (endpoint, data, created_at) VALUES (?, ?, ?)",
+                          (sub["endpoint"], json.dumps(sub), now_kst()))
+        self.conn.commit()
+
+    def remove_push_sub(self, endpoint: str) -> None:
+        self.conn.execute("DELETE FROM push_sub WHERE endpoint = ?", (endpoint,))
+        self.conn.commit()
+
+    def push_subs(self) -> list[dict]:
+        return [json.loads(r["data"]) for r in self.conn.execute("SELECT data FROM push_sub").fetchall()]
 
     def reset(self) -> None:
         """연습을 처음부터 다시 할 때 쓴다."""

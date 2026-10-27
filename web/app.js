@@ -204,7 +204,7 @@ async function renderBrief(date) {
     ${b.market_day && b.issues ? sec("Top 10 이슈", briefIssues(b.issues))
       : `<p class="muted" style="margin:0 4px 12px">일·월요일 아침은 전날 미국 장이 없어 일정만 담습니다.</p>`}
     ${sec("이번 주 일정", briefSchedule(b.schedule))}
-    <p class="muted" style="margin:10px 4px">사실만 모았습니다. 뉴스·공시는 알림 판단에 쓰지 않습니다.</p>
+    <p class="muted" style="margin:10px 4px">사실만 모았습니다. 뉴스·공시는 알림 판단에 쓰지 않습니다.<br>매일 9시 폰 알림은 오른쪽 위 ⚙ 설정에서 켤 수 있습니다.</p>
     <p style="text-align:center"><button class="btn ghost" id="brief-now">지금 다시 만들기</button></p>`;
   $("#brief-date").onchange = (e) => renderBrief(e.target.value);
   $("#brief-now").onclick = makeBriefing;
@@ -416,6 +416,14 @@ async function renderSettings() {
       <div class="setting"><span class="k">키움 계좌</span><span class="v">${s.is_practice ? "연습용 보유 종목" : "연결됨 (조회 전용)"}</span></div>
       <div class="setting"><span class="k">마지막 알림 확인</span><span class="v num">${s.last_check ? esc(s.last_check.replace("T", " ").slice(0, 16)) : "-"}</span></div>
     </section>
+    <section class="card">
+      <h2>폰 알림</h2>
+      <p>매일 오전 9시, 아침 브리핑이 도착하면 이 폰으로 알려드립니다. 실시간 알림은 보내지 않습니다.</p>
+      <div class="setting"><span class="k">이 폰</span><span class="v" id="push-state">확인 중…</span></div>
+      <button class="btn" id="push-on" hidden>이 폰에서 알림 받기</button>
+      <button class="btn secondary" id="push-test" hidden>시험 알림 보내기</button>
+      <button class="btn secondary" id="push-off" hidden>알림 끄기</button>
+    </section>
     <button class="btn" id="check-now">지금 확인하기</button>
     ${s.login_required ? `<button class="btn secondary" id="logout">로그아웃</button>` : ""}
     <p class="muted" style="margin:16px 4px">이 앱은 조회만 합니다. 매수·매도 주문 기능은 없습니다.</p>
@@ -427,6 +435,51 @@ async function renderSettings() {
   };
   const lo = $("#logout");
   if (lo) lo.onclick = async () => { await api("/logout", {}); showLogin(); };
+  setupPush();
+}
+
+// ---------- 폰 알림 ----------
+function b64ToBytes(b64) {
+  const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+
+async function setupPush() {
+  const label = $("#push-state");
+  const on = $("#push-on"), off = $("#push-off"), test = $("#push-test");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    label.textContent = "이 브라우저는 알림을 지원하지 않습니다";
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const show = async () => {
+    const sub = await reg.pushManager.getSubscription();
+    const blocked = Notification.permission === "denied";
+    label.textContent = blocked ? "알림이 차단됨 (크롬 설정에서 허용 필요)" : sub ? "받는 중 ✓" : "받지 않음";
+    on.hidden = !!sub || blocked;
+    off.hidden = test.hidden = !sub;
+  };
+  on.onclick = async () => {
+    try {
+      if ((await Notification.requestPermission()) !== "granted") { await show(); return; }
+      const { key } = await api("/push/key");
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+      await api("/push/subscribe", sub.toJSON());
+      toast("알림을 켰습니다. 매일 9시에 알려드립니다");
+    } catch (e) { if (e.message !== "login") toast("알림을 켜지 못했습니다: " + e.message); }
+    await show();
+  };
+  off.onclick = async () => {
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { await api("/push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+    toast("알림을 껐습니다");
+    await show();
+  };
+  test.onclick = async () => {
+    const r = await api("/push/test", {});
+    toast(r.sent ? "시험 알림을 보냈습니다" : "보내지 못했습니다. 알림을 껐다가 다시 켜 보세요");
+  };
+  await show();
 }
 
 function showLogin() {

@@ -224,6 +224,42 @@ def make_briefing():
     return {"briefing": run(db, force=True), "dates": db.briefing_dates()}
 
 
+class PushSub(BaseModel):
+    endpoint: str = Field(pattern=r"^https://", max_length=1000)
+    keys: dict[str, str]
+
+
+@app.get("/api/push/key")
+def push_key():
+    from . import push
+
+    return {"key": push.public_key(), "count": len(db.push_subs())}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(sub: PushSub):
+    """이 폰에 매일 9시 브리핑 알림을 받는다."""
+    db.add_push_sub(sub.model_dump())
+    return {"ok": True}
+
+
+class PushEndpoint(BaseModel):
+    endpoint: str
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: PushEndpoint):
+    db.remove_push_sub(body.endpoint)
+    return {"ok": True}
+
+
+@app.post("/api/push/test")
+def push_test():
+    from . import push
+
+    return push.send_all(db, "시험 알림", "알림이 잘 옵니다 👍")
+
+
 @app.get("/api/alerts")
 def alerts():
     return {"alerts": db.alerts()}

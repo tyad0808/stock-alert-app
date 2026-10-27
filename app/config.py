@@ -61,6 +61,8 @@ KIWOOM_APP_SECRET = os.environ.get("KIWOOM_APP_SECRET", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 BRIEFING_MODEL = os.environ.get("BRIEFING_MODEL", "claude-opus-5-5")
 # 미국 공시(SEC)는 연락처가 담긴 이름으로 요청해야 한다
+# 폰 알림을 보내는 쪽 연락처 (알림 서비스 규칙상 필요)
+PUSH_CONTACT = os.environ.get("PUSH_CONTACT", "https://alert.broadstore.co.kr")
 SEC_USER_AGENT = os.environ.get("SEC_USER_AGENT", "stock-alert-app (+https://alert.broadstore.co.kr)")
 
 
