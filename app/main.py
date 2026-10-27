@@ -3,6 +3,8 @@
 import hashlib
 import hmac
 import secrets
+import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -43,7 +45,27 @@ async def lifespan(_app: FastAPI):
         except KiwoomError as e:
             # 키움이 잠깐 안 돼도 앱은 켜져 있어야 한다. 15분마다 도는 시세 확인이 다시 시도한다
             print(f"첫 시세 확인 실패: {e}")
+    if not get_provider(db).is_practice:
+        threading.Thread(target=_keep_warm, daemon=True).start()
     yield
+
+
+WARM_EVERY = 60  # 초 (기억 시간 50초보다 길게 → 매번 새로 받음)
+
+
+def _keep_warm():
+    """실제 시세일 때, 화면을 열자마자 바로 보이도록 1분마다 미리 받아 둔다."""
+    while True:
+        try:
+            provider = get_provider(db)
+            symbols = [s["symbol"] for s in config.load_watchlist()]
+            symbols += [h["symbol"] for h in provider.holdings() if h["symbol"] not in symbols]
+            for symbol in symbols:
+                provider.daily_bars(symbol)
+            provider.fx_rate()
+        except Exception as e:  # noqa: BLE001 — 잠깐 실패해도 다음 회차에 다시 받는다
+            print(f"시세 미리 받기 실패: {e}")
+        time.sleep(WARM_EVERY)
 
 
 app = FastAPI(title="주식 알림 앱", lifespan=lifespan)

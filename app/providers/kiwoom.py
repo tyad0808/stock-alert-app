@@ -38,8 +38,9 @@ MAX_PAGES = 4
 REQUEST_GAP = 0.25  # 초당 4회 이하로 부른다
 
 # 화면이 1분마다 새로 고쳐도 키움을 매번 부르지 않도록 잠깐 기억해 둔다 (서버 프로세스마다 따로)
-BARS_TTL = 60
-HOLDINGS_TTL = 60
+BARS_TTL = 50
+FULL_TTL = 6 * 3600
+HOLDINGS_TTL = 50
 FX_TTL = 600
 
 _cache: dict[str, tuple[float, object]] = {}
@@ -63,9 +64,27 @@ def _num(s) -> float:
         return 0.0
 
 
+_refreshing: set[str] = set()
+
+
 def _cached(key: str, ttl: float, make):
+    """기억해 둔 값을 바로 돌려준다. 오래됐으면 일단 그 값을 주고 뒤에서 새로 받아 둔다 (화면이 기다리지 않게)."""
     hit = _cache.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    if hit:
+        if key not in _refreshing:
+            _refreshing.add(key)
+
+            def refresh():
+                try:
+                    _cache[key] = (time.monotonic(), make())
+                except Exception:  # noqa: BLE001 — 다음 요청 때 다시 시도한다
+                    pass
+                finally:
+                    _refreshing.discard(key)
+
+            threading.Thread(target=refresh, daemon=True).start()
         return hit[1]
     value = make()
     _cache[key] = (time.monotonic(), value)
@@ -159,10 +178,10 @@ class KiwoomProvider(PriceProvider):
 
     # ---- 시세 ----
 
-    def _chart(self, symbol: str, exchange: str) -> list[Bar]:
+    def _chart(self, symbol: str, exchange: str, pages: int = MAX_PAGES) -> list[Bar]:
         rows, next_key = [], ""
         today = datetime.now(KST).strftime("%Y%m%d")
-        for _ in range(MAX_PAGES):
+        for _ in range(pages):
             data, next_key = self._call("usa06012", {
                 "stex_tp": exchange, "stk_cd": symbol, "strt_dt": today,
                 "upd_stkpc_tp": "1", "exrt_appl_tp": "0",
@@ -212,6 +231,23 @@ class KiwoomProvider(PriceProvider):
 
     def daily_bars(self, symbol: str) -> list[Bar]:
         def load():
+            # 1년치 전체는 몇 시간에 한 번만 받고, 그사이에는 최근 한 쪽만 받아 이어 붙인다
+            full = _cache.get(f"full:{symbol}")
+            listing = _exchange_of.get(symbol, "")
+            if full and "|" in listing and time.monotonic() - full[0] < FULL_TTL:
+                try:
+                    recent = self._chart(*listing.split("|", 1), pages=1)
+                except KiwoomError:
+                    recent = []
+                if recent:
+                    merged = {b.date: b for b in full[1]}
+                    merged.update({b.date: b for b in recent})
+                    return [merged[d] for d in sorted(merged)]
+            bars = load_full()
+            _cache[f"full:{symbol}"] = (time.monotonic(), bars)
+            return bars
+
+        def load_full():
             last_error = None
             for code, exchange in self._listing_candidates(symbol):
                 try:
