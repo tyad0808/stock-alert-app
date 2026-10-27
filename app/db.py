@@ -161,6 +161,14 @@ class DB:
     def push_subs(self) -> list[dict]:
         return [json.loads(r["data"]) for r in self.conn.execute("SELECT data FROM push_sub").fetchall()]
 
+    def prune(self, keep_days: int) -> int:
+        """오래된 알림 기록·브리핑을 지운다. 지운 개수를 돌려준다."""
+        cutoff = (datetime.now(KST) - timedelta(days=keep_days)).isoformat(timespec="seconds")
+        n = self.conn.execute("DELETE FROM alert WHERE created_at < ?", (cutoff,)).rowcount
+        n += self.conn.execute("DELETE FROM briefing WHERE date < ?", (cutoff[:10],)).rowcount
+        self.conn.commit()
+        return n
+
     def reset(self) -> None:
         """연습을 처음부터 다시 할 때 쓴다."""
         self.conn.executescript("DELETE FROM zone_state; DELETE FROM holding_state; DELETE FROM alert; DELETE FROM meta;")

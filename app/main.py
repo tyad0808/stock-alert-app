@@ -121,6 +121,9 @@ def status(request: Request):
         "hysteresis": config.HYSTERESIS,
         "profit_step": config.PROFIT_STEP,
         "loss_step": config.LOSS_STEP,
+        "etfs": [e["symbol"] for e in universe.etfs(db)],
+        "top10_updated": db.get_meta("universe_date"),
+        "keep_days": config.KEEP_DAYS,
     }
 
 
@@ -268,9 +271,18 @@ def push_test():
     return push.send_all(db, "시험 알림", "알림이 잘 옵니다 👍")
 
 
+def _alert_group(a: dict, etf_syms: set[str]) -> str:
+    """알림 탭 구분: 내 종목(수익·손실) / ETF / 주식."""
+    if a["kind"] in ("profit", "loss"):
+        return "mine"
+    return "etf" if a["symbol"] in etf_syms else "stock"
+
+
 @app.get("/api/alerts")
 def alerts():
-    return {"alerts": db.alerts()}
+    etf_syms = {e["symbol"] for e in universe.etfs(db)}
+    return {"alerts": [{**a, "group": _alert_group(a, etf_syms)} for a in db.alerts()],
+            "keep_days": config.KEEP_DAYS}
 
 
 @app.post("/api/check")

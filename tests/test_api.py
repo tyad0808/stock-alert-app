@@ -154,3 +154,25 @@ def test_login_required(tmp_path, monkeypatch):
         assert c.post("/api/login", json={"password": "wrong"}).status_code == 401
         assert c.post("/api/login", json={"password": "pw1234"}).status_code == 200
         assert c.get("/api/board").status_code == 200
+
+
+def test_alert_groups(client):
+    got = alerts(client)
+    groups = {a["group"] for a in got}
+    assert {"stock", "mine"} <= groups
+    assert all(a["group"] == "mine" for a in got if a["kind"] in ("profit", "loss"))
+    assert all(a["group"] == "etf" for a in got if a["symbol"] in {"TQQQ", "SOXL", "SOXX", "VOO", "IVV", "SPY"}
+               and a["kind"] not in ("profit", "loss"))
+
+
+def test_prune_old_records(tmp_path):
+    from app.db import DB
+
+    db = DB(tmp_path / "p.db")
+    db.add_alert(created_at="2020-01-01T09:00:00+09:00", market_date="2019-12-31", kind="buy", symbol="X",
+                 name="X", level=20, price=1, high=1, drawdown=-20, message="old")
+    db.add_alert(market_date="2026-10-27", kind="buy", symbol="X", name="X", level=20, price=1, high=1,
+                 drawdown=-20, message="new")
+    db.save_briefing("2020-01-01", {"date": "2020-01-01"})
+    assert db.prune(180) == 2
+    assert [a["message"] for a in db.alerts()] == ["new"]

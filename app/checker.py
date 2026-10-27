@@ -141,6 +141,10 @@ def run_check(db: DB, provider: PriceProvider | None = None) -> list[dict]:
 
     provider = provider or get_provider(db)
     universe.refresh(db, provider)  # 하루 한 번 Top 10 순위 갱신
+    today = now_kst()[:10]
+    if db.get_meta("pruned") != today:  # 하루 한 번 오래된 기록 정리
+        db.prune(config.KEEP_DAYS)
+        db.set_meta("pruned", today)
     holdings = provider.holdings()
     held = {h["symbol"]: h for h in holdings}
     fx = provider.fx_rate()

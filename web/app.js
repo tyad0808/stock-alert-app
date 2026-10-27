@@ -166,11 +166,23 @@ function alertList(alerts) {
   return html;
 }
 
+const ALERT_GROUPS = [["all", "전체"], ["stock", "주식"], ["etf", "ETF"], ["mine", "내 종목"]];
+
 async function renderAlerts() {
-  const { alerts } = await api("/alerts");
+  const { alerts, keep_days } = await api("/alerts");
   if (alerts.length) store("seenAlert", String(alerts[0].id));
   updateBadge(alerts);
-  view.innerHTML = alertList(alerts);
+  const group = store("alertGroup") || "all";
+  const shown = group === "all" ? alerts : alerts.filter((a) => a.group === group);
+  const count = (g) => (g === "all" ? alerts.length : alerts.filter((a) => a.group === g).length);
+  view.innerHTML = `
+    <div class="board-head"><span class="sort">${ALERT_GROUPS.map(([g, label]) =>
+      `<button class="chip ${group === g ? "on" : ""}" data-group="${g}">${label} ${count(g)}</button>`).join("")}</span></div>
+    ${alertList(shown)}
+    <p class="muted" style="margin:14px 4px">알림 기록은 최근 ${keep_days}일만 보관합니다.</p>`;
+  view.querySelectorAll("[data-group]").forEach((b) => {
+    b.onclick = () => { store("alertGroup", b.dataset.group); renderAlerts(); };
+  });
 }
 
 // ---------- 아침 브리핑 ----------
@@ -416,6 +428,14 @@ async function renderSettings() {
       <div class="setting"><span class="k">같은 종목·같은 구간</span><span class="v">하루 최대 1번</span></div>
       <div class="setting"><span class="k">경계선 여유</span><span class="v">${s.hysteresis}%p 이상 회복해야 구간 이탈</span></div>
       <div class="setting"><span class="k">하루 50% 이상 변동</span><span class="v">알림 대신 "데이터 확인"</span></div>
+    </section>
+    <section class="card">
+      <h2>목록과 자동 작업</h2>
+      <div class="setting"><span class="k">주식 Top 10</span><span class="v">키움 시가총액 순위로 매일 갱신${s.top10_updated ? ` (마지막 ${esc(s.top10_updated)})` : ""}</span></div>
+      <div class="setting"><span class="k">ETF</span><span class="v">${s.etfs.map(esc).join(" · ")}</span></div>
+      <div class="setting"><span class="k">시세 확인·알림 판단</span><span class="v">15분마다</span></div>
+      <div class="setting"><span class="k">아침 브리핑</span><span class="v">매일 08:50 작성 · 09:00 폰 알림</span></div>
+      <div class="setting"><span class="k">기록 보관</span><span class="v">최근 ${s.keep_days}일 · 매일 새벽 4시 백업</span></div>
     </section>
     <section class="card">
       <h2>연결 상태</h2>
