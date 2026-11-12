@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>화질·사이즈 확인</title>
+  <meta name="description" content="주문 전에 화질과 사이즈를 미리 확인해 보세요.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <p class="brand" id="brand"></p>
+      <h1 id="title"></h1>
+      <p class="intro" id="intro"></p>
+      <p class="privacy"><span aria-hidden="true">🔒</span> <span id="privacy"></span></p>
+    </header>
+
+    <!-- 1. 파일 올리기 -->
+    <section class="card" id="step1">
+      <h2><span class="num">1</span><span data-msg="step1Title"></span></h2>
+
+      <label class="drop" id="drop">
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf,.ai,image/jpeg,image/png,application/pdf">
+        <span class="drop-icon" aria-hidden="true">＋</span>
+        <span class="drop-text" data-msg="uploadButton"></span>
+      </label>
+      <p class="help" data-msg="uploadHelp"></p>
+
+      <p class="status" id="loading" hidden><span class="spinner" aria-hidden="true"></span><span data-msg="loading"></span></p>
+      <p class="error" id="fileError" role="alert" hidden></p>
+
+      <div class="original" id="original" hidden>
+        <div class="thumb-box"><img id="thumb" alt="올리신 파일 미리보기"></div>
+        <p class="filename" id="fileName"></p>
+        <div class="page-pick" id="pagePick" hidden>
+          <label for="pageSelect" data-msg="pageLabel"></label>
+          <select id="pageSelect"></select>
+          <p class="help" data-msg="pageHelp"></p>
+        </div>
+        <p class="orig-size" id="origSize"></p>
+        <p class="help" data-msg="originalHelp"></p>
+        <button type="button" class="link-btn" id="changeFile" data-msg="uploadChange"></button>
+      </div>
+    </section>
+
+    <!-- 2. 제작 사이즈 입력 -->
+    <section class="card" id="step2">
+      <h2><span class="num">2</span><span data-msg="step2Title"></span></h2>
+
+      <p class="label" data-msg="itemLabel"></p>
+      <div class="chips" id="items" role="radiogroup"></div>
+      <p class="help" data-msg="itemHelp"></p>
+
+      <p class="label" data-msg="sizeLabel"></p>
+      <div class="size-row">
+        <label class="size-field">
+          <span data-msg="widthLabel"></span>
+          <input type="text" inputmode="decimal" id="reqW" autocomplete="off" placeholder="60">
+          <span class="unit">cm</span>
+        </label>
+        <span class="times" aria-hidden="true">×</span>
+        <label class="size-field">
+          <span data-msg="heightLabel"></span>
+          <input type="text" inputmode="decimal" id="reqH" autocomplete="off" placeholder="180">
+          <span class="unit">cm</span>
+        </label>
+      </div>
+      <p class="help" data-msg="sizeHelp"></p>
+
+      <button type="button" class="primary" id="checkBtn" data-msg="checkButton"></button>
+      <p class="help center" data-msg="checkHelp"></p>
+      <p class="error" id="sizeError" role="alert" hidden></p>
+    </section>
+
+    <!-- 3. 결과 -->
+    <section class="card" id="step3" hidden>
+      <h2><span class="num">3</span><span data-msg="step3Title"></span></h2>
+      <p class="stale" id="stale" hidden data-msg="resultStale"></p>
+
+      <div class="previews" id="previews">
+        <figure class="pv pv-main">
+          <figcaption id="pvMainCap"></figcaption>
+          <div class="pv-stage"><canvas id="pvMain"></canvas></div>
+          <p class="pv-size" id="pvMainSize"></p>
+        </figure>
+        <figure class="pv pv-orig" id="pvOrigWrap" hidden>
+          <figcaption data-msg="previewOriginal"></figcaption>
+          <div class="pv-stage"><canvas id="pvOrig"></canvas></div>
+        </figure>
+      </div>
+
+      <div class="verdict" id="verdict"></div>
+
+      <button type="button" class="primary" id="zoomBtn" data-msg="zoomButton"></button>
+      <p class="help center" data-msg="zoomButtonHelp"></p>
+    </section>
+
+    <!-- 4. 확대 화질 보기 -->
+    <section class="card" id="step4" hidden>
+      <h2><span class="num">4</span><span data-msg="step4Title"></span></h2>
+      <p class="zoom-desc" id="zoomDesc"></p>
+
+      <div class="quality" id="quality" hidden>
+        <span class="q-label" data-msg="qualityTitle"></span>
+        <span class="q-text" id="qualityText"></span>
+      </div>
+
+      <div class="zoom-levels" id="zoomLevels" role="radiogroup"></div>
+      <p class="help" data-msg="zoomLevelHelp"></p>
+
+      <div class="zoom-wrap">
+        <canvas id="zoomCanvas" class="zoom-canvas"></canvas>
+        <div class="minimap-box">
+          <canvas id="minimap"></canvas>
+        </div>
+      </div>
+      <p class="help" data-msg="zoomViewHelp"></p>
+      <p class="help" data-msg="minimapHelp"></p>
+      <p class="help note" data-msg="colorNote"></p>
+
+      <div class="upscale" id="upscale" hidden>
+        <p class="up-title" data-msg="upscaleTitle"></p>
+        <p class="up-desc" data-msg="upscaleDesc"></p>
+        <div class="up-apply">
+          <p class="up-apply-title" data-msg="upscaleApply"></p>
+          <p class="up-apply-desc" data-msg="upscaleApplyDesc"></p>
+          <p class="up-email" id="upEmail"></p>
+          <button type="button" class="primary up-mail-btn" id="mailCopyBtn" data-msg="mailCopyButton"></button>
+          <p class="help center" data-msg="mailCopyHelp"></p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot" id="foot"></footer>
+
+    <!-- 메일 안내 팝업 -->
+    <div class="modal" id="mailModal" hidden>
+      <div class="modal-bg" id="mailModalBg"></div>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="mailModalTitle">
+        <p class="modal-check" id="mailModalTitle"></p>
+        <p class="modal-email" id="modalEmail"></p>
+
+        <p class="modal-sub" data-msg="mailFormTitle"></p>
+        <p class="modal-warn">⚠️ <span data-msg="mailWarn"></span></p>
+
+        <div class="mail-field">
+          <div class="mail-field-head"><span data-msg="mailSubjectLabel"></span></div>
+          <p class="mail-field-val" data-msg="mailSubject"></p>
+        </div>
+        <div class="mail-field">
+          <div class="mail-field-head"><span data-msg="mailBodyLabel"></span></div>
+          <p class="mail-field-val" data-msg="mailBody"></p>
+        </div>
+
+        <p class="modal-note" data-msg="mailNote"></p>
+        <button type="button" class="primary" id="mailModalClose" data-msg="mailClose"></button>
+      </div>
+    </div>
+  </main>
+
+  <script src="settings.js"></script>
+  <script src="messages.js"></script>
+  <script src="lib/pdf.min.js"></script>
+  <script src="js/ratio.js"></script>
+  <script src="js/fileReader.js"></script>
+  <script src="js/zoomViewer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
