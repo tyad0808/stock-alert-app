@@ -8,7 +8,7 @@ window.SETTINGS = {
   "companyName": "브로애드",
   "kakaoChannelUrl": "",
   "upscaleEmail": "BRO_AD@NAVER.COM",
-  "upscaleOfferFor": ["low", "pdf"],
+  "upscaleOfferFor": ["good", "ok", "low", "pdf"],
   "defaultZoom": 200,
   "zoomLevels": [100, 200, 300],
   "mode": "illustrator",
