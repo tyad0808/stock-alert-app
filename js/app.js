@@ -54,6 +54,12 @@
       zl.appendChild(b);
     });
     markZoom(S.defaultZoom);
+    // 배율이 하나뿐이면 배율 버튼 줄과 그 설명은 숨김
+    if (S.zoomLevels.length <= 1) {
+      zl.hidden = true;
+      const help = document.querySelector('[data-msg="zoomLevelHelp"]');
+      if (help) help.hidden = true;
+    }
   }
 
   /* ---------- 4. 확대 화질 보기 ---------- */
